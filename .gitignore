@@ -1,0 +1,14 @@
+*.swp
+*.o
+*.so
+core
+vgcore.*
+autom4te.cache
+pkgIndex.tcl
+Makefile
+configure
+config.status
+config.log
+doc/resolve.n
+tclconfig
+last

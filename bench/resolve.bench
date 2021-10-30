@@ -1,0 +1,25 @@
+if {"bench" ni [info commands bench]} {
+	package require bench
+	namespace import bench::*
+}
+
+package require resolve
+
+proc main {} {
+	bench resolve-1.1 {Compare resolve async implementations} -batch auto -setup { #<<<
+	} -compare {
+		_async_tcl  {
+			unset -nocomplain ::bench_res
+			::resolve::_async_tcl www.rubylane.com {set ::bench_res}
+			if {![info exists ::bench_res]} {vwait ::bench_res}
+			llength $::bench_res[unset ::bench_res]
+		}
+	} -cleanup {
+	} -result 2
+	#>>>
+}
+
+main
+
+# vim: ft=tcl foldmethod=marker foldmarker=<<<,>>> ts=4 shiftwidth=4
+
