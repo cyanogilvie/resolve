@@ -61,6 +61,14 @@ TEA_PREFIX
 
 TEA_SETUP_COMPILER
 
+AC_CHECK_TYPES([intptr_t, uintptr_t],,,[[
+#include <stdint.h>
+]])
+
+CHECK_GLIBC
+CHECK_GETADDRINFO_A
+CHECK_PIPE2
+
 #-----------------------------------------------------------------------
 # __CHANGE__
 # Specify the C source files to compile in TEA_ADD_SOURCES,
@@ -189,3 +197,4 @@ AC_CONFIG_FILES([Makefile pkgIndex.tcl])
 #--------------------------------------------------------------------
 
 AC_OUTPUT
+
