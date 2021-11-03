@@ -4,10 +4,12 @@
 package ifneeded @PACKAGE_NAME@ @PACKAGE_VERSION@ [list apply {
 	dir {
 		if {[package vsatisfies [package provide Tcl] 9.0-]} {
-			load [file join $dir @PKG_LIB_FILE9@] [string totitle @PACKAGE_NAME@]
+			set libfile	[file join $dir @PKG_LIB_FILE9@]
 		} else {
-			load [file join $dir @PKG_LIB_FILE8@] [string totitle @PACKAGE_NAME@]
+			set libfile	[file join $dir @PKG_LIB_FILE8@]
 		}
+		load $libfile [string totitle @PACKAGE_NAME@]
+		namespace eval ::resolve [list variable libfile $libfile]
 		if {[file readable [file join $dir library/resolve.tcl]]} {
 			# In source tree case
 			source [file join $dir library/resolve.tcl]

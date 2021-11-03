@@ -1,0 +1,30 @@
+if {"bench" ni [info commands bench]} {
+	package require bench
+	namespace import bench::*
+}
+
+package require resolve
+
+proc main {} {
+	bench resolver-1.1 {Compare resolve async implementations} -batch auto -setup { #<<<
+	} -compare {
+		_getaddrinfo_a  {
+			::resolve::resolver instvar r -implementation getaddrinfo_a
+			$r add www.rubylane.com
+			llength [$r get www.rubylane.com]
+		}
+		_getaddrinfo {
+			::resolve::resolver instvar r -implementation getaddrinfo_a
+			$r add www.rubylane.com
+			llength [$r get www.rubylane.com]
+		}
+	} -cleanup {
+		unset -nocomplain r
+	} -result 2
+	#>>>
+}
+
+main
+
+# vim: ft=tcl foldmethod=marker foldmarker=<<<,>>> ts=4 shiftwidth=4
+

@@ -1,0 +1,130 @@
+{
+   Memcheck:Leak
+   fun:malloc
+   fun:TclpAlloc
+   fun:Tcl_Alloc
+   fun:AllocVarEntry
+   fun:CreateHashEntry
+   fun:VarHashCreateVar
+   fun:TclLookupArrayElement
+   fun:TclObjLookupVarEx
+}
+{
+   Memcheck:Leak
+   fun:malloc
+   fun:TclpAlloc
+   fun:Tcl_Alloc
+   fun:AllocVarEntry
+   fun:CreateHashEntry
+   fun:VarHashCreateVar
+   fun:TclLookupSimpleVar
+   fun:TclObjLookupVarEx
+}
+{
+   Memcheck:Leak
+   fun:realloc
+   fun:TclpRealloc
+   fun:GrowStringBuffer
+   fun:AppendUtfToUtfRep
+   fun:Tcl_AppendLimitedToObj
+   fun:Tcl_AppendToObj
+   fun:TclpNativeJoinPath
+   fun:TclJoinPath
+}
+{
+   Memcheck:Leak
+   fun:malloc
+   fun:TclpAlloc
+   fun:Tcl_Alloc
+   fun:TclInitArrayVar
+   fun:TclLookupArrayElement
+   fun:TclObjLookupVarEx
+   fun:Tcl_ObjSetVar2
+   fun:Tcl_SetVar2Ex
+}
+{
+   parse_args
+   Memcheck:Leak
+   ...
+   fun:GetParseSpecFromObj
+   fun:parse_args
+   fun:Dispatch
+   ...
+}
+{
+   get_parse_spec
+   Memcheck:Leak
+   ...
+   fun:set_from_any
+   fun:GetParseSpecFromObj
+   fun:parse_args
+   ...
+}
+{
+   parse_args_init
+   Memcheck:Leak
+   ...
+   fun:Parse_args_Init
+   fun:Tcl_LoadObjCmd
+   fun:Dispatch
+   ...
+}
+{
+   gai_thread
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:allocate_stack
+   fun:pthread_create@@GLIBC_2.2.5
+   fun:__gai_notify_only
+   fun:__gai_notify
+   fun:handle_requests
+   fun:start_thread
+   ...
+}
+{
+   gai_get_elem
+   Memcheck:Leak
+   ...
+   fun:get_elem
+   fun:__gai_enqueue_request
+   fun:getaddrinfo_a
+   ...
+}
+{
+   tcl_init_bytecode
+   Memcheck:Leak
+   ...
+   fun:TclInitByteCode
+   ...
+}
+{
+   tcl_create_literal
+   Memcheck:Leak
+   ...
+   fun:TclCreateLiteral
+   ...
+}
+{
+   tcl_create_literal
+   Memcheck:Leak
+   ...
+   fun:CompileCmdLiteral
+   ...
+}
+{
+   tcl_create_interp
+   Memcheck:Leak
+   ...
+   fun:Tcl_CreateInterp
+   fun:main
+}
+{
+   dlopen
+   Memcheck:Leak
+   ...
+   fun:dl_open_worker
+   fun:_dl_catch_exception
+   fun:_dl_open
+   fun:do_dlopen
+}

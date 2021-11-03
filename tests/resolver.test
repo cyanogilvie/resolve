@@ -1,0 +1,162 @@
+if {[lsearch [namespace children] ::tcltest] == -1} {
+    package require tcltest
+    namespace import ::tcltest::*
+}
+
+try {package require resolve} on error {errmsg options} {
+	puts stderr "Error loading resolve: [dict get $options -errorinfo]"
+	return -options $options $errmsg
+}
+
+proc expect_address args { #<<<
+	::parse_args::parse_args $args {
+		-count		{-default 1}
+		-family		{-default {ipv4 ipv6}}
+		-suffix		{}
+		addrs		{-required}
+	}
+
+	set regex_ipv4		{^[0-9]{1,3}(\.[0-9]{1,3}){3}$}
+
+	set regex_ipv6		{
+		^(?:
+			([[:xdigit:]]{1,4}:){7}[[:xdigit:]]{1,4} |
+			([[:xdigit:]]{1,4}:){1,7}   : |
+			([[:xdigit:]]{1,4}:){1,6}   :[[:xdigit:]]{1,4} |
+			([[:xdigit:]]{1,4}:){1,5}  (:[[:xdigit:]]{1,4}){1,2} |
+			([[:xdigit:]]{1,4}:){1,4}  (:[[:xdigit:]]{1,4}){1,3} |
+			([[:xdigit:]]{1,4}:){1,3}  (:[[:xdigit:]]{1,4}){1,4} |
+			([[:xdigit:]]{1,4}:){1,2}  (:[[:xdigit:]]{1,4}){1,5} |
+			 [[:xdigit:]]{1,4}:        (:[[:xdigit:]]{1,4}){1,6} |
+			:((:[[:xdigit:]]{1,4}){1,7}|:) |
+			fe80:(:[[:xdigit:]]{0,4}){0,4}%[[:alnum:]]+ |
+			::(ffff(:0{1,4})?:)?((25[0-5]|(2[0-4]|1?[0-9])?[0-9])\.){3}(25[0-5]|(2[0-4]|1?[0-9])?[0-9]) |
+			([[:xdigit:]]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1?[0-9])?[0-9])\.){3}(25[0-5]|(2[0-4]|1?[0-9])?[0-9])
+		)$
+	}
+	set regex_ipv6_bracketed		{
+		^\[(?:
+			([[:xdigit:]]{1,4}:){7}[[:xdigit:]]{1,4} |
+			([[:xdigit:]]{1,4}:){1,7}   : |
+			([[:xdigit:]]{1,4}:){1,6}   :[[:xdigit:]]{1,4} |
+			([[:xdigit:]]{1,4}:){1,5}  (:[[:xdigit:]]{1,4}){1,2} |
+			([[:xdigit:]]{1,4}:){1,4}  (:[[:xdigit:]]{1,4}){1,3} |
+			([[:xdigit:]]{1,4}:){1,3}  (:[[:xdigit:]]{1,4}){1,4} |
+			([[:xdigit:]]{1,4}:){1,2}  (:[[:xdigit:]]{1,4}){1,5} |
+			 [[:xdigit:]]{1,4}:        (:[[:xdigit:]]{1,4}){1,6} |
+			:((:[[:xdigit:]]{1,4}){1,7}|:) |
+			fe80:(:[[:xdigit:]]{0,4}){0,4}%[[:alnum:]]+ |
+			::(ffff(:0{1,4})?:)?((25[0-5]|(2[0-4]|1?[0-9])?[0-9])\.){3}(25[0-5]|(2[0-4]|1?[0-9])?[0-9]) |
+			([[:xdigit:]]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1?[0-9])?[0-9])\.){3}(25[0-5]|(2[0-4]|1?[0-9])?[0-9])
+		)\]$
+	}
+
+	foreach addr $addrs {
+		if {[info exists suffix]} {
+			set tail	[string range $addr end-[expr {[string length $suffix]-1}] end]
+			if {$tail ne $suffix} {
+				error "Expecting suffix \"$suffix\", got \"$addr\""
+			}
+			set addr	[string range $addr 0 end-[string length $suffix]]
+		}
+		if {"ipv4" in $family && [regexp -nocase -expanded $regex_ipv4 $addr]} continue
+		if {"ipv6" in $family && [regexp -nocase -expanded $regex_ipv6 $addr]} continue
+		if {"ipv6" in $family && [regexp -nocase -expanded $regex_ipv6_bracketed $addr]} continue
+		error "Expected an [join $family { or }] address, got \"$addr\""
+	}
+
+	if {$count != [llength $addrs]} {
+		error "Expected $count addresses, got: [llength $addrs]"
+	}
+
+	return "matches"
+}
+
+#>>>
+set tests {
+
+	test resolver_${imp}_${mode}-1.1 {resolve async} -body { #<<<
+		set start	[clock microseconds]
+		resolve::resolver instvar resolver -implementation $imp
+		$resolver add rubylane.com
+		$resolver add google.com:https
+		$resolver add :login -protocol IPPROTO_TCP
+		$resolver add :who -protocol IPPROTO_UDP -flags AI_PASSIVE
+		$resolver add :exec -protocol IPPROTO_UDP	;# exec doesn't exist on udp
+		$resolver add :foo
+		$resolver go
+		$resolver waitfor ready 10000
+		list \
+			[expect_address -count 2 -family ipv4 [$resolver get rubylane.com]] \
+			[expect_address -count 2 -suffix :443 [$resolver get google.com:https]] \
+			[$resolver get :login] \
+			[$resolver get :who] \
+			[catch {$resolver get :exec} r o] [dict get $o -errorcode] $r \
+			[catch {$resolver get :foo} r o] [dict get $o -errorcode] $r
+	} -cleanup {
+		unset -nocomplain resolver r o start
+	} -result [list \
+		matches \
+		matches \
+		{{[::1]:513} 127.0.0.1:513} \
+		{0.0.0.0:513 {[::]:513}} \
+		1 {RESOLVE EAI_SERVICE {}} {Failed to resolve :exec} \
+		1 {RESOLVE EAI_SERVICE {}} {Failed to resolve :foo}
+	]
+	#>>>
+	test resolver_${imp}_${mode}-2.1 {resolve async, implicit go} -body { #<<<
+		set start	[clock microseconds]
+		resolve::resolver instvar resolver -implementation $imp
+		$resolver add rubylane.com
+		$resolver add google.com:https
+		$resolver add :login -protocol IPPROTO_TCP
+		$resolver add :who -protocol IPPROTO_UDP -flags AI_PASSIVE
+		$resolver add :exec -protocol IPPROTO_UDP	;# exec doesn't exist on udp
+		$resolver add :foo
+		list \
+			[expect_address -count 2 -family ipv4 [$resolver get rubylane.com]] \
+			[expect_address -count 2 -suffix :443 [$resolver get google.com:https]] \
+			[$resolver get :login] \
+			[$resolver get :who] \
+			[catch {$resolver get :exec} r o] [dict get $o -errorcode] $r \
+			[catch {$resolver get :foo} r o] [dict get $o -errorcode] $r
+	} -cleanup {
+		unset -nocomplain resolver r o start
+	} -result [list \
+		matches \
+		matches \
+		{{[::1]:513} 127.0.0.1:513} \
+		{0.0.0.0:513 {[::]:513}} \
+		1 {RESOLVE EAI_SERVICE {}} {Failed to resolve :exec} \
+		1 {RESOLVE EAI_SERVICE {}} {Failed to resolve :foo}
+	]
+	#>>>
+
+}
+
+foreach imp {getaddrinfo_a getaddrinfo} {
+	# Coroutine context
+	unset -nocomplain done
+	coroutine coro_test_resolve namespace eval :: {
+		set mode coro
+		try $tests on error {errmsg options} {
+			puts stderr "Unhandled error in $mode tests: [dict get $options -errorinfo]"
+		}
+		set done	1
+	}
+
+	if {![info exists done]} {
+		vwait done
+	}
+
+	# Non-coroutine context
+	set mode vwait
+	try $tests
+}
+
+# cleanup
+::tcltest::cleanupTests
+return
+
+# vim: ft=tcl foldmethod=marker foldmarker=<<<,>>> ts=4 shiftwidth=4
+
