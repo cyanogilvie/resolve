@@ -40,6 +40,7 @@ AC_DEFUN([CHECK_GETADDRINFO_A], [
 	then
 		AC_DEFINE(HAVE_GETADDRINFO_A, 1, [Have getaddrinfo_a?])
 		AC_MSG_RESULT([yes])
+		EXTRA_LIBS="$EXTRA_LIBS -lanl"
 	else
 		AC_DEFINE(HAVE_GETADDRINFO_A, 0, [Have getaddrinfo_a?])
 		AC_MSG_RESULT([no])

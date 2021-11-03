@@ -19,7 +19,7 @@ dnl	to configure the system for the local environment.
 # so that we create the export library with the dll.
 #-----------------------------------------------------------------------
 
-AC_INIT([resolve],[0.1])
+AC_INIT([resolve],[0.3])
 
 #--------------------------------------------------------------------
 # Call TEA_INIT as the first TEA_ macro to set up initial vars.
@@ -65,6 +65,7 @@ AC_CHECK_TYPES([intptr_t, uintptr_t],,,[[
 #include <stdint.h>
 ]])
 
+EXTRA_LIBS=""
 CHECK_GLIBC
 CHECK_GETADDRINFO_A
 CHECK_PIPE2
@@ -82,7 +83,7 @@ CHECK_PIPE2
 TEA_ADD_SOURCES([resolve.c])
 TEA_ADD_HEADERS([])
 TEA_ADD_INCLUDES([])
-TEA_ADD_LIBS([-lanl])
+TEA_ADD_LIBS([$EXTRA_LIBS])
 TEA_ADD_CFLAGS([])
 TEA_ADD_STUB_SOURCES([])
 TEA_ADD_TCL_SOURCES([library/resolve.tcl])
