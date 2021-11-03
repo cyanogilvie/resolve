@@ -17,14 +17,20 @@ static void append_outcome(Tcl_DString* ds, const char* name, const char* servic
 
 	switch (rc) {
 		case 0:					gai_err_str = "ok";					break;
+#ifdef EAI_CANCELLED
 		case EAI_CANCELED:		gai_err_str = "EAI_CANCELED";		break;
+#endif
+#ifdef EAI_ADDRFAMILY
 		case EAI_ADDRFAMILY:	gai_err_str = "EAI_ADDRFAMILY";		break;
+#endif
 		case EAI_AGAIN:			gai_err_str = "EAI_AGAIN";			break;
 		case EAI_BADFLAGS:		gai_err_str = "EAI_BADFLAGS";		break;
 		case EAI_FAIL:			gai_err_str = "EAI_FAIL";			break;
 		case EAI_FAMILY:		gai_err_str = "EAI_FAMILY";			break;
 		case EAI_MEMORY:		gai_err_str = "EAI_MEMORY";			break;
+#ifdef EAI_NODATA
 		case EAI_NODATA:		gai_err_str = "EAI_NODATA";			break;
+#endif
 		case EAI_NONAME:		gai_err_str = "EAI_NONAME";			break;
 		case EAI_SERVICE:		gai_err_str = "EAI_SERVICE";		break;
 		case EAI_SOCKTYPE:		gai_err_str = "EAI_SOCKTYPE";		break;
@@ -169,6 +175,7 @@ done:
 }
 
 //>>>
+#if HAVE_GETADDRINFO_A
 static void free_gai_cx(struct gai_cx* cx) //<<<
 {
 	int		i;
@@ -411,6 +418,7 @@ err:
 }
 
 //>>>
+#endif
 static int compile_hints_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
 	struct addrinfo	hints;
@@ -576,8 +584,8 @@ DLLEXPORT int Resolve_Init(Tcl_Interp* interp) //<<<
 	Tcl_CreateObjCommand(interp, NS "::_compile_hints", compile_hints_cmd, NULL, NULL);
 #if HAVE_GETADDRINFO_A
 	Tcl_CreateObjCommand(interp, NS "::_getaddrinfo_a", getaddrinfo_a_cmd, NULL, NULL);
-#endif
 	Tcl_CreateObjCommand(interp, NS "::_handle_response", handle_response_cmd, NULL, NULL);
+#endif
 
 #ifdef USE_RESOLVE_STUBS
 	//TEST_OK(Tcl_PkgProvideEx(interp, PACKAGE_NAME, PACKAGE_VERSION, resolveStubs));

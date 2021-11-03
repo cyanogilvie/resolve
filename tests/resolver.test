@@ -8,6 +8,9 @@ try {package require resolve} on error {errmsg options} {
 	return -options $options $errmsg
 }
 
+testConstraint have_getaddrinfo_a	[expr {[llength [info commands ::resolve::_getaddrinfo_a]] > 0}]
+testConstraint have_getaddrinfo		[expr {[llength [info commands ::resolve::_getaddrinfo]] > 0}]
+
 proc expect_address args { #<<<
 	::parse_args::parse_args $args {
 		-count		{-default 1}
@@ -75,7 +78,7 @@ proc expect_address args { #<<<
 #>>>
 set tests {
 
-	test resolver_${imp}_${mode}-1.1 {resolve async} -body { #<<<
+	test resolver_${imp}_${mode}-1.1 {resolve async} -constraints have_$imp -body { #<<<
 		set start	[clock microseconds]
 		resolve::resolver instvar resolver -implementation $imp
 		$resolver add rubylane.com
@@ -104,7 +107,7 @@ set tests {
 		1 {RESOLVE EAI_SERVICE {}} {Failed to resolve :foo}
 	]
 	#>>>
-	test resolver_${imp}_${mode}-2.1 {resolve async, implicit go} -body { #<<<
+	test resolver_${imp}_${mode}-2.1 {resolve async, implicit go} -constraints have_$imp -body { #<<<
 		set start	[clock microseconds]
 		resolve::resolver instvar resolver -implementation $imp
 		$resolver add rubylane.com
@@ -135,6 +138,10 @@ set tests {
 }
 
 foreach imp {getaddrinfo_a getaddrinfo} {
+	#if {[info commands ::resolve::_$imp] eq {}} {
+	#	puts stderr "The $imp implementation is not available on this platform, skipping tests"
+	#	continue
+	#}
 	# Coroutine context
 	unset -nocomplain done
 	coroutine coro_test_resolve namespace eval :: {
