@@ -143,6 +143,18 @@ Some options are available when adding a request to control the type of matches 
 :	Prevent a lookup of the supplied service.
 
 
+# SIGNALS EXPORTED
+
+The **resolve::resolver** is a subclass of **::sop::signalsource** (of the **sop** package), and
+exposes relevant state via that mechanism.  The exported signals are:
+
+**ready**
+:	True when all added requests have been resolved (whether successfully or not).
+
+**req_$name**
+:	True when the individual request for *$name* has been resolved.
+
+
 # EXAMPLES
 
 Lookup a few hostnames and services:
