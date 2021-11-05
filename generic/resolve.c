@@ -609,16 +609,9 @@ DLLEXPORT int Resolve_Unload(Tcl_Interp* interp, int flags) //<<<
 	int					retcode = TCL_OK;
 	Tcl_Namespace*		ns = NULL;
 
-	switch (flags) {
-		case TCL_UNLOAD_DETACH_FROM_INTERPRETER:
-			retcode = Tcl_EvalEx(interp, "::resolve::_unload", -1, TCL_EVAL_GLOBAL);
-			break;
-
-		case TCL_UNLOAD_DETACH_FROM_PROCESS:
-			break;
-
-		default:
-			THROW_ERROR("Unhandled flags");
+	if (flags == TCL_UNLOAD_DETACH_FROM_PROCESS) {
+		// Must happen before the below cleanup
+		retcode = Tcl_EvalEx(interp, "::resolve::_unload", -1, TCL_EVAL_GLOBAL);
 	}
 
 	ns = Tcl_FindNamespace(interp, "::resolve", NULL, TCL_GLOBAL_ONLY);
@@ -626,6 +619,8 @@ DLLEXPORT int Resolve_Unload(Tcl_Interp* interp, int flags) //<<<
 		Tcl_DeleteNamespace(ns);
 		ns = NULL;
 	}
+
+	Tcl_DeleteAssocData(interp, "resolve");
 
 	return retcode;
 }
