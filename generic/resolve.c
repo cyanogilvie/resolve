@@ -346,7 +346,7 @@ static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 		Tcl_Obj**				rfv;
 		int						rfc;
 		const char*				str;
-		int						strlen;
+		int						str_len;
 		const unsigned char*	compiled_req = NULL;
 		int						compiled_req_len;
 		struct addrinfo*		req = NULL;
@@ -355,8 +355,8 @@ static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 		if (rfc != 3)
 			THROW_ERROR_LABEL(err, retcode, "Each req must be a list of length 3");
 
-		str = Tcl_GetStringFromObj(rfv[0], &strlen);
-		if (strlen) {
+		str = Tcl_GetStringFromObj(rfv[0], &str_len);
+		if (str_len) {
 			cx->req[i].ar_name = strdup(str);
 			if (cx->req[i].ar_name == NULL) {
 				// Since the only way we should be able to get here is ENOMEM, this probably won't work:
@@ -366,8 +366,8 @@ static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 			}
 		}
 
-		str = Tcl_GetStringFromObj(rfv[1], &strlen);
-		if (strlen) {
+		str = Tcl_GetStringFromObj(rfv[1], &str_len);
+		if (str_len) {
 			cx->req[i].ar_service = strdup(str);
 			if (cx->req[i].ar_service == NULL)
 				// Since the only way we should be able to get here is ENOMEM, this probably won't work:
