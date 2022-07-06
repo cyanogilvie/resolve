@@ -419,6 +419,244 @@ err:
 
 //>>>
 #endif
+static int _getnameinfo_flags(Tcl_Interp* interp, Tcl_Obj* obj, int* flags) //<<<
+{
+	int					retcode = TCL_OK;
+	int					res = 0;
+	Tcl_Obj**			ov = NULL;
+	int					oc;
+	int					i;
+	static const char* flag_str[] = {
+		"NI_NAMEREQD",
+		"NI_DGRAM",
+		"NI_NOFQDN",
+		"NI_NUMERICHOST",
+		"NI_NUMERICSERV",
+#ifdef NI_IDN
+		"NI_IDN",
+#endif
+/* These are deprecated
+#ifdef NI_IDN_ALLOW_UNASSIGNED
+		"NI_IDN_ALLOW_UNASSIGNED",
+#endif
+#ifdef NI_IDN_USE_STD3_ASCII_RULES
+		"NI_IDN_USE_STD3_ASCII_RULES",
+#endif
+*/
+		NULL
+	};
+	int flag_map[] = {
+		NI_NAMEREQD,
+		NI_DGRAM,
+		NI_NOFQDN,
+		NI_NUMERICHOST,
+		NI_NUMERICSERV,
+#ifdef NI_IDN
+		NI_IDN,
+#endif
+/* These are deprecated
+#ifdef NI_IDN_ALLOW_UNASSIGNED
+		NI_IDN_ALLOW_UNASSIGNED,
+#endif
+#ifdef NI_IDN_USE_STD3_ASCII_RULES
+		NI_IDN_USE_STD3_ASCII_RULES,
+#endif
+*/
+		0
+	};
+
+	TEST_OK_LABEL(done, retcode, Tcl_ListObjGetElements(interp, obj, &oc, &ov));
+
+	for (i=0; i<oc; i++) {
+		int	index;
+
+		TEST_OK_LABEL(done, retcode, Tcl_GetIndexFromObj(interp, ov[i], flag_str, "flag", TCL_EXACT, &index));
+		res |= flag_map[index];
+	}
+
+	*flags = res;
+
+done:
+	return retcode;
+}
+
+//>>>
+static int getnameinfo_ipv4_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
+{
+	struct interp_cx*	l = Tcl_GetAssocData(interp, "resolve", NULL);
+	int					retcode = TCL_OK;
+	char				host[NI_MAXHOST];
+	char				serv[NI_MAXSERV];
+	char*				hostptr = host;
+	char*				servptr = serv;
+	socklen_t			hostptr_len = NI_MAXHOST;
+	socklen_t			servptr_len = NI_MAXSERV;
+	const char*			addr_str = NULL;
+	const char*			serv_str = NULL;
+	int					addr_str_len, serv_str_len;
+	struct sockaddr_in	addr = {0};
+	socklen_t			addrlen = sizeof(addr);
+	int					rc, flags;
+	Tcl_Obj*			res[2] = {NULL, NULL};
+
+	CHECK_ARGS(3, "addr port flags");
+
+	addr_str = Tcl_GetStringFromObj(objv[1], &addr_str_len);
+
+	addr.sin_family = AF_INET;
+	if (addr_str_len > 0) {
+		if (inet_pton(AF_INET, addr_str, &addr.sin_addr.s_addr) != 1)
+			THROW_ERROR_LABEL(done, retcode, "Invalid IPv4 address: \"", addr_str, "\"");
+	} else {
+		hostptr = NULL;
+		hostptr_len = 0;
+	}
+
+	serv_str = Tcl_GetStringFromObj(objv[2], &serv_str_len);
+
+	if (serv_str_len > 0) {
+		int port;
+		TEST_OK_LABEL(done, retcode, Tcl_GetIntFromObj(interp, objv[2], &port));
+		if (port < 0 || port >= (1<<16))
+			THROW_ERROR_LABEL(done, retcode, "Port is outside the valid range [0..2**16): ", serv_str);
+		addr.sin_port = htons(port);
+	} else {
+		servptr = NULL;
+		servptr_len = 0;
+	}
+
+	TEST_OK_LABEL(done, retcode, _getnameinfo_flags(interp, objv[3], &flags));
+
+	if (hostptr_len || servptr_len) {
+		rc = getnameinfo((struct sockaddr*)&addr, addrlen, hostptr, hostptr_len, servptr, servptr_len, flags);
+		if (rc) {
+			if (rc == EAI_SYSTEM) {
+				Tcl_SetErrno(errno);
+				Tcl_SetObjResult(interp, Tcl_NewStringObj(Tcl_PosixError(interp), -1));
+				retcode = TCL_ERROR;
+				goto done;
+			} else {
+				const char*		gai_err = NULL;
+
+				Tcl_SetObjResult(interp, Tcl_ObjPrintf("getnameinfo error: %s", gai_strerror(rc)));
+				switch (rc) {
+					case EAI_AGAIN:		gai_err = "EAI_AGAIN";		break;
+					case EAI_BADFLAGS:	gai_err = "EAI_BADFLAGS";	break;
+					case EAI_FAIL:		gai_err = "EAI_FAIL";		break;
+					case EAI_FAMILY:	gai_err = "EAI_FAMILY";		break;
+					case EAI_MEMORY:	gai_err = "EAI_MEMORY";		break;
+					case EAI_NONAME:	gai_err = "EAI_NONAME";		break;
+					case EAI_OVERFLOW:	gai_err = "EAI_OVERFLOW";	break;
+					default:			gai_err = "unknown";		break;
+				}
+				Tcl_SetErrorCode(interp, "RESOLVE", "GAI", gai_err, NULL);
+				retcode = TCL_ERROR;
+				goto done;
+			}
+		}
+	}
+
+	replace_tclobj(&res[0], hostptr_len ? Tcl_NewStringObj(host, -1) : l->empty);	// TODO: use dedup?
+	replace_tclobj(&res[1], servptr_len ? Tcl_NewStringObj(serv, -1) : l->empty);
+
+	Tcl_SetObjResult(interp, Tcl_NewListObj(2, res));
+
+done:
+	replace_tclobj(&res[0], NULL);
+	replace_tclobj(&res[1], NULL);
+
+	return retcode;
+}
+
+//>>>
+static int getnameinfo_ipv6_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
+{
+	struct interp_cx*	l = Tcl_GetAssocData(interp, "resolve", NULL);
+	int					retcode = TCL_OK;
+	char				host[NI_MAXHOST];
+	char				serv[NI_MAXSERV];
+	char*				hostptr = host;
+	char*				servptr = serv;
+	socklen_t			hostptr_len = NI_MAXHOST;
+	socklen_t			servptr_len = NI_MAXSERV;
+	const char*			addr_str = NULL;
+	const char*			serv_str = NULL;
+	int					addr_str_len, serv_str_len;
+	struct sockaddr_in6	addr = {0};
+	socklen_t			addrlen = sizeof(addr);
+	int					rc, flags;
+	Tcl_Obj*			res[2] = {NULL, NULL};
+
+	CHECK_ARGS(3, "addr port flags");
+
+	addr_str = Tcl_GetStringFromObj(objv[1], &addr_str_len);
+
+	addr.sin6_family = AF_INET6;
+	if (addr_str_len > 0) {
+		if (inet_pton(AF_INET6, addr_str, &addr.sin6_addr.s6_addr) != 1)
+			THROW_ERROR_LABEL(done, retcode, "Invalid IPv6 address: \"", addr_str, "\"");
+	} else {
+		hostptr = NULL;
+		hostptr_len = 0;
+	}
+
+	serv_str = Tcl_GetStringFromObj(objv[2], &serv_str_len);
+
+	if (serv_str_len > 0) {
+		int port;
+		TEST_OK_LABEL(done, retcode, Tcl_GetIntFromObj(interp, objv[2], &port));
+		if (port < 0 || port >= (1<<16))
+			THROW_ERROR_LABEL(done, retcode, "Port is outside the valid range [0..2**16): ", serv_str);
+		addr.sin6_port = htons(port);
+	} else {
+		servptr = NULL;
+		servptr_len = 0;
+	}
+
+	TEST_OK_LABEL(done, retcode, _getnameinfo_flags(interp, objv[3], &flags));
+
+	if (hostptr_len || servptr_len) {
+		rc = getnameinfo((struct sockaddr*)&addr, addrlen, hostptr, hostptr_len, servptr, servptr_len, flags);
+		if (rc) {
+			if (rc == EAI_SYSTEM) {
+				Tcl_SetErrno(errno);
+				Tcl_SetObjResult(interp, Tcl_NewStringObj(Tcl_PosixError(interp), -1));
+				retcode = TCL_ERROR;
+				goto done;
+			} else {
+				const char*		gai_err = NULL;
+
+				Tcl_SetObjResult(interp, Tcl_ObjPrintf("getnameinfo error: %s", gai_strerror(rc)));
+				switch (rc) {
+					case EAI_AGAIN:		gai_err = "EAI_AGAIN";		break;
+					case EAI_BADFLAGS:	gai_err = "EAI_BADFLAGS";	break;
+					case EAI_FAIL:		gai_err = "EAI_FAIL";		break;
+					case EAI_FAMILY:	gai_err = "EAI_FAMILY";		break;
+					case EAI_MEMORY:	gai_err = "EAI_MEMORY";		break;
+					case EAI_NONAME:	gai_err = "EAI_NONAME";		break;
+					case EAI_OVERFLOW:	gai_err = "EAI_OVERFLOW";	break;
+					default:			gai_err = "unknown";		break;
+				}
+				Tcl_SetErrorCode(interp, "RESOLVE", "GAI", gai_err, NULL);
+				retcode = TCL_ERROR;
+				goto done;
+			}
+		}
+	}
+
+	replace_tclobj(&res[0], hostptr_len ? Tcl_NewStringObj(host, -1) : l->empty);	// TODO: use dedup?
+	replace_tclobj(&res[1], servptr_len ? Tcl_NewStringObj(serv, -1) : l->empty);
+
+	Tcl_SetObjResult(interp, Tcl_NewListObj(2, res));
+
+done:
+	replace_tclobj(&res[0], NULL);
+	replace_tclobj(&res[1], NULL);
+
+	return retcode;
+}
+
+//>>>
 static int compile_hints_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
 	struct addrinfo	hints;
@@ -510,19 +748,12 @@ void free_interp_cx(ClientData cdata, Tcl_Interp* interp) //<<<
 	struct interp_cx*	l = cdata;
 
 	if (l) {
-		/*
-		close(l->pipe[PIPE_R]);
-		close(l->pipe[PIPE_W]);
-		*/
-		Tcl_UnregisterChannel(interp, l->pipechan[PIPE_W]); l->pipechan[PIPE_W] = NULL;
-		Tcl_UnregisterChannel(interp, l->pipechan[PIPE_R]); l->pipechan[PIPE_R] = NULL;
-		/*
-		Tcl_Close(interp, l->pipechan[PIPE_R]);
-		Tcl_Close(interp, l->pipechan[PIPE_W]);
-		*/
-		l->pipechan[PIPE_R] = NULL;
-		l->pipechan[PIPE_W] = NULL;
-		ckfree(l); l = NULL;
+		Tcl_UnregisterChannel(interp, l->pipechan[PIPE_W]);  l->pipechan[PIPE_W] = NULL;
+		Tcl_UnregisterChannel(interp, l->pipechan[PIPE_R]);  l->pipechan[PIPE_R] = NULL;
+		l->pipe[PIPE_W] = -1;
+		l->pipe[PIPE_R] = -1;
+		replace_tclobj(&l->empty, NULL);
+		ckfree(l);  l = NULL;
 	}
 }
 
@@ -548,6 +779,7 @@ DLLEXPORT int Resolve_Init(Tcl_Interp* interp) //<<<
 	TEST_OK(Tcl_Export(interp, ns, "*", 0));
 
 	l = (struct interp_cx*)ckalloc(sizeof *l);
+	memset(l, 0, sizeof *l);
 
 	// IPC pipe <<<
 #	if HAVE_PIPE2
@@ -563,6 +795,7 @@ DLLEXPORT int Resolve_Init(Tcl_Interp* interp) //<<<
 	}
 	l->pipechan[PIPE_R] = Tcl_MakeFileChannel(INT2PTR(l->pipe[PIPE_R]), TCL_READABLE);
 	l->pipechan[PIPE_W] = Tcl_MakeFileChannel(INT2PTR(l->pipe[PIPE_W]), TCL_WRITABLE);
+	replace_tclobj(&l->empty, Tcl_NewObj());
 	Tcl_SetChannelOption(interp, l->pipechan[PIPE_R], "-translation", "binary");
 	Tcl_SetChannelOption(interp, l->pipechan[PIPE_R], "-buffering",   "none");
 	Tcl_SetChannelOption(interp, l->pipechan[PIPE_W], "-translation", "binary");
@@ -570,22 +803,21 @@ DLLEXPORT int Resolve_Init(Tcl_Interp* interp) //<<<
 	Tcl_RegisterChannel(interp, l->pipechan[PIPE_R]);
 	Tcl_RegisterChannel(interp, l->pipechan[PIPE_W]);
 	if (NULL == Tcl_SetVar(interp, NS "::_result_pipe", Tcl_GetChannelName(l->pipechan[PIPE_R]), TCL_LEAVE_ERR_MSG)) {
-		Tcl_Close(interp, l->pipechan[PIPE_R]);
-		Tcl_Close(interp, l->pipechan[PIPE_W]);
-		free_interp_cx(NULL, interp);
+		free_interp_cx(l, interp);
 		return TCL_ERROR;
 	}
 	// IPC pipe >>>
 
 	Tcl_SetAssocData(interp, "resolve", free_interp_cx, l);
 
-	//TEST_OK(Tcl_CreateObjCommand(interp, NS "::getaddrinfo", getaddrinfo_cmd, NULL, NULL));
 	Tcl_CreateObjCommand(interp, NS "::_getaddrinfo", getaddrinfo_cmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, NS "::_compile_hints", compile_hints_cmd, NULL, NULL);
 #if HAVE_GETADDRINFO_A
 	Tcl_CreateObjCommand(interp, NS "::_getaddrinfo_a", getaddrinfo_a_cmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, NS "::_handle_response", handle_response_cmd, NULL, NULL);
 #endif
+	Tcl_CreateObjCommand(interp, NS "::_getnameinfo_ipv4", getnameinfo_ipv4_cmd, NULL, NULL);
+	Tcl_CreateObjCommand(interp, NS "::_getnameinfo_ipv6", getnameinfo_ipv6_cmd, NULL, NULL);
 
 #ifdef USE_RESOLVE_STUBS
 	//TEST_OK(Tcl_PkgProvideEx(interp, PACKAGE_NAME, PACKAGE_VERSION, resolveStubs));

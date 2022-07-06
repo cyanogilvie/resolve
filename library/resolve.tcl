@@ -43,11 +43,13 @@ namespace eval ::resolve {
 	#>>>
 
 	proc _pool {} { #<<<
-		if {![tsv::exists _resolve pool]} {
-			package require Thread
-			set pool	[tpool::create -minworkers 1 -initcmd {load {} Resolve}]
-			tpool::preserve $pool
-			tsv::set _resolve pool $pool
+		tsv::lock _resolve {
+			if {![tsv::exists _resolve pool]} {
+				package require Thread
+				set pool	[tpool::create -minworkers 1 -initcmd {load {} Resolve}]
+				tpool::preserve $pool
+				tsv::set _resolve pool $pool
+			}
 		}
 
 		tsv::get _resolve pool
@@ -55,9 +57,11 @@ namespace eval ::resolve {
 
 	#>>>
 	proc _unload {} { # Internal handler for things to be cleaned up when the package is unloaded <<<
-		if {[tsv::exists _resolve pool]} {
-			tpool::release [tsv::get _resolve pool]
-			tsv::unset _resolve
+		tsv::lock _resolve {
+			if {[tsv::exists _resolve pool]} {
+				tpool::release [tsv::get _resolve pool]
+				tsv::unset _resolve
+			}
 		}
 	}
 
@@ -255,6 +259,43 @@ namespace eval ::resolve {
 		}
 
 		#>>>
+	}
+
+	#>>>
+	proc getnameinfo args { #<<<
+		parse_args $args {
+			-namerequired	{-boolean}
+			-noidn			{-boolean}
+			-dgram			{-boolean -# {Resolve serv as a datagram service}}
+			-nofqdn			{-boolean}
+			-numerichost	{-boolean}
+			-numericserv	{-boolean}
+			-ip				{-default {}}
+			-port			{-default {}}
+		}
+
+		set flags	{}
+		if {$namerequired}	{lappend flags NI_NAMEREQD}
+		if {!$noidn}		{lappend flags NI_IDN}		;# IDN is the default
+		if {$dgram}			{lappend flags NI_DGRAM}
+		if {$nofqdn}		{lappend flags NI_NOFQDN}
+		if {$numerichost}	{lappend flags NI_NUMERICHOST}
+		if {$numericserv}	{lappend flags NI_NUMERICSERV}
+
+		lassign [if {[string match *:* $ip]} {
+			_getnameinfo_ipv6 $ip $port $flags
+		} else {
+			_getnameinfo_ipv4 $ip $port $flags
+		}] host serv
+
+		set res	{}
+		if {$host ne ""} {
+			dict set res host $host
+		}
+		if {$serv ne ""} {
+			dict set res serv $serv
+		}
+		set res
 	}
 
 	#>>>

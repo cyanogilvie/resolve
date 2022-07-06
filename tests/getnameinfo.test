@@ -1,0 +1,196 @@
+if {[lsearch [namespace children] ::tcltest] == -1} {
+    package require tcltest
+    namespace import ::tcltest::*
+}
+
+try {package require resolve} on error {errmsg options} {
+	puts stderr "Error loading resolve: [dict get $options -errorinfo]"
+	return -options $options $errmsg
+}
+
+test getnameinfo_ipv4-0.1 {Too few args} -body { #<<<
+	::resolve::_getnameinfo_ipv4 {} {}
+} -returnCodes error -result {Wrong # of arguments.  Must be "addr port flags"}
+#>>>
+test getnameinfo_ipv4-0.2 {Too many args} -body { #<<<
+	::resolve::_getnameinfo_ipv4 127.0.0.1 {} {} foo
+} -returnCodes error -result {Wrong # of arguments.  Must be "addr port flags"}
+#>>>
+test getnameinfo_ipv4-0.3 {Invalid IPv4 address} -body { #<<<
+	::resolve::_getnameinfo_ipv4 127.0.0.0.1 {} {}
+} -returnCodes error -result {Invalid IPv4 address: "127.0.0.0.1"}
+#>>>
+test getnameinfo_ipv4-0.4.1 {Invalid port: not int} -body { #<<<
+	::resolve::_getnameinfo_ipv4 {} foo {}
+} -returnCodes error -result {expected integer but got "foo"}
+#>>>
+test getnameinfo_ipv4-0.4.2 {Invalid port: < 0} -body { #<<<
+	::resolve::_getnameinfo_ipv4 {} -1 {}
+} -returnCodes error -result {Port is outside the valid range [0..2**16): -1}
+#>>>
+test getnameinfo_ipv4-0.4.3 {Invalid port: > 65536-1} -body { #<<<
+	::resolve::_getnameinfo_ipv4 {} 65536 {}
+} -returnCodes error -result {Port is outside the valid range [0..2**16): 65536}
+#>>>
+test getnameinfo_ipv4-0.5 {Nothing to look up (do nothing gracefully)} -body { #<<<
+	::resolve::_getnameinfo_ipv4 {} {} {}
+} -result {{} {}}
+#>>>
+test getnameinfo_ipv4-0.6 {All the flags} -body { #<<<
+	::resolve::_getnameinfo_ipv4 {} {} {
+		NI_NAMEREQD
+		NI_DGRAM
+		NI_NOFQDN
+		NI_NUMERICHOST
+		NI_NUMERICSERV
+		NI_IDN
+	}
+} -result {{} {}}
+#>>>
+test getnameinfo_ipv4-0.7 {Bad flag} -body { #<<<
+	::resolve::_getnameinfo_ipv4 {} {} NI_NAMEREQD_X
+} -returnCodes error \
+	-errorCode {TCL LOOKUP INDEX flag NI_NAMEREQD_X} \
+	-result {bad flag "NI_NAMEREQD_X": must be NI_NAMEREQD, NI_DGRAM, NI_NOFQDN, NI_NUMERICHOST, NI_NUMERICSERV, or NI_IDN}
+#>>>
+test getnameinfo_ipv4-1.1 {lookup 127.0.0.1} -body { #<<<
+	::resolve::_getnameinfo_ipv4 127.0.0.1 {} {}
+} -result {localhost {}}
+#>>>
+test getnameinfo_ipv4-1.2 {lookup 127.0.0.1, NI_NUMERICHOST} -body { #<<<
+	::resolve::_getnameinfo_ipv4 127.0.0.1 {} NI_NUMERICHOST
+} -result {127.0.0.1 {}}
+#>>>
+test getnameinfo_ipv4-1.3 {lookup 0.0.0.0, NI_NAMEREQD} -body { #<<<
+	::resolve::_getnameinfo_ipv4 0.0.0.0 {} NI_NAMEREQD
+} -returnCodes error -errorCode {RESOLVE GAI EAI_NONAME} -result {getnameinfo error: Name or service not known}
+#>>>
+test getnameinfo_ipv4-1.4 {lookup 0.0.0.0, no NI_NAMEREQD} -body { #<<<
+	::resolve::_getnameinfo_ipv4 0.0.0.0 {} {}
+} -result {0.0.0.0 {}}
+#>>>
+test getnameinfo_ipv4-1.5 {lookup 127.0.0.1, NI_NAMEREQD} -body { #<<<
+	::resolve::_getnameinfo_ipv4 127.0.0.1 {} NI_NAMEREQD
+} -result {localhost {}}
+#>>>
+test getnameinfo_ipv4-2.1 {lookup http port} -body { #<<<
+	::resolve::_getnameinfo_ipv4 {} 80 {}
+} -result {{} http}
+#>>>
+test getnameinfo_ipv4-2.2 {lookup http port, NI_NUMERICSERV} -body { #<<<
+	::resolve::_getnameinfo_ipv4 {} 80 NI_NUMERICSERV
+} -result {{} 80}
+#>>>
+test getnameinfo_ipv4-3.1 {both host and serv} -body { #<<<
+	::resolve::_getnameinfo_ipv4 {127.0.0.1} 80 {}
+} -result {localhost http}
+#>>>
+
+test getnameinfo_ipv6-0.1 {Too few args} -body { #<<<
+	::resolve::_getnameinfo_ipv6 {} {}
+} -returnCodes error -result {Wrong # of arguments.  Must be "addr port flags"}
+#>>>
+test getnameinfo_ipv6-0.2 {Too many args} -body { #<<<
+	::resolve::_getnameinfo_ipv6 ::1 {} {} foo
+} -returnCodes error -result {Wrong # of arguments.  Must be "addr port flags"}
+#>>>
+test getnameinfo_ipv6-0.3 {Invalid ipv6 address} -body { #<<<
+	::resolve::_getnameinfo_ipv6 ::1: {} {}
+} -returnCodes error -result {Invalid IPv6 address: "::1:"}
+#>>>
+test getnameinfo_ipv6-0.4.1 {Invalid port: not int} -body { #<<<
+	::resolve::_getnameinfo_ipv6 {} foo {}
+} -returnCodes error -result {expected integer but got "foo"}
+#>>>
+test getnameinfo_ipv6-0.4.2 {Invalid port: < 0} -body { #<<<
+	::resolve::_getnameinfo_ipv6 {} -1 {}
+} -returnCodes error -result {Port is outside the valid range [0..2**16): -1}
+#>>>
+test getnameinfo_ipv6-0.4.3 {Invalid port: > 65536-1} -body { #<<<
+	::resolve::_getnameinfo_ipv6 {} 65536 {}
+} -returnCodes error -result {Port is outside the valid range [0..2**16): 65536}
+#>>>
+test getnameinfo_ipv6-0.5 {Nothing to look up (do nothing gracefully)} -body { #<<<
+	::resolve::_getnameinfo_ipv6 {} {} {}
+} -result {{} {}}
+#>>>
+test getnameinfo_ipv6-0.6 {All the flags} -body { #<<<
+	::resolve::_getnameinfo_ipv6 {} {} {
+		NI_NAMEREQD
+		NI_DGRAM
+		NI_NOFQDN
+		NI_NUMERICHOST
+		NI_NUMERICSERV
+		NI_IDN
+	}
+} -result {{} {}}
+#>>>
+test getnameinfo_ipv6-0.7 {Bad flag} -body { #<<<
+	::resolve::_getnameinfo_ipv6 {} {} NI_NAMEREQD_X
+} -returnCodes error \
+	-errorCode {TCL LOOKUP INDEX flag NI_NAMEREQD_X} \
+	-result {bad flag "NI_NAMEREQD_X": must be NI_NAMEREQD, NI_DGRAM, NI_NOFQDN, NI_NUMERICHOST, NI_NUMERICSERV, or NI_IDN}
+#>>>
+test getnameinfo_ipv6-1.1 {lookup ::1} -body { #<<<
+	::resolve::_getnameinfo_ipv6 ::1 {} {}
+} -result {localhost {}}
+#>>>
+test getnameinfo_ipv6-1.2 {lookup ::1, NI_NUMERICHOST} -body { #<<<
+	::resolve::_getnameinfo_ipv6 ::1 {} NI_NUMERICHOST
+} -result {::1 {}}
+#>>>
+test getnameinfo_ipv6-1.3 {lookup ::ffff:0.0.0.0, NI_NAMEREQD} -body { #<<<
+	::resolve::_getnameinfo_ipv6 ::ffff:0.0.0.0 {} NI_NAMEREQD
+} -returnCodes error -errorCode {RESOLVE GAI EAI_NONAME} -result {getnameinfo error: Name or service not known}
+#>>>
+test getnameinfo_ipv6-1.4 {lookup ::ffff:0.0.0.0, no NI_NAMEREQD} -body { #<<<
+	::resolve::_getnameinfo_ipv6 ::ffff:0.0.0.0 {} {}
+} -result {::ffff:0.0.0.0 {}}
+#>>>
+test getnameinfo_ipv6-1.5 {lookup ::1, NI_NAMEREQD} -body { #<<<
+	::resolve::_getnameinfo_ipv6 ::1 {} NI_NAMEREQD
+} -result {localhost {}}
+#>>>
+test getnameinfo_ipv6-2.1 {lookup http port} -body { #<<<
+	::resolve::_getnameinfo_ipv6 {} 80 {}
+} -result {{} http}
+#>>>
+test getnameinfo_ipv6-2.2 {lookup http port, NI_NUMERICSERV} -body { #<<<
+	::resolve::_getnameinfo_ipv6 {} 80 NI_NUMERICSERV
+} -result {{} 80}
+#>>>
+test getnameinfo_ipv6-3.1 {both host and serv} -body { #<<<
+	::resolve::_getnameinfo_ipv6 {::1} 80 {}
+} -result {localhost http}
+#>>>
+test getnameinfo_ipv6-4.1 {valid IPv4 embedded in IPv6} -body { #<<<
+	::resolve::_getnameinfo_ipv6 ::ffff:127.0.0.1 {} {}
+} -result {localhost {}}
+#>>>
+
+test getnameinfo-0.1 {Do nothing gracefully} -body { #<<<
+	::resolve::getnameinfo
+} -result {}
+#>>>
+test getnameinfo-1.1.1 {Lookup 127.0.0.1} -body { #<<<
+	::resolve::getnameinfo -ip 127.0.0.1
+} -result {host localhost}
+#>>>
+test getnameinfo-1.1.2 {Lookup ::1} -body { #<<<
+	::resolve::getnameinfo -ip ::1
+} -result {host localhost}
+#>>>
+test getnameinfo-2.1 {Lookup port 80} -body { #<<<
+	::resolve::getnameinfo -port 80
+} -result {serv http}
+#>>>
+test getnameinfo-2.1 {Lookup ip and port} -body { #<<<
+	::resolve::getnameinfo -ip 127.0.0.1 -port 80
+} -result {host localhost serv http}
+#>>>
+
+# cleanup
+::tcltest::cleanupTests
+return
+
+# vim: ft=tcl foldmethod=marker foldmarker=<<<,>>> ts=4 shiftwidth=4

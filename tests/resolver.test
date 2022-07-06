@@ -166,4 +166,3 @@ foreach imp {getaddrinfo_a getaddrinfo} {
 return
 
 # vim: ft=tcl foldmethod=marker foldmarker=<<<,>>> ts=4 shiftwidth=4
-

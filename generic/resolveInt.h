@@ -6,6 +6,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -15,6 +16,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <errno.h>
 
 // Taken from tclInt.h:
 #if !defined(INT2PTR) && !defined(PTR2INT)
@@ -42,6 +44,7 @@
 struct interp_cx {
 	int			pipe[2];		/* Results ready signal pipe from getaddrinfo_a */
 	Tcl_Channel	pipechan[2];
+	Tcl_Obj*	empty;
 };
 
 struct gai_cx {
