@@ -1,6 +1,6 @@
 % resolve(3) 0.2 | Advanced Name Resolution for Tcl Scripts
 % Cyan Ogilvie
-% 0.2
+% 0.7
 
 
 # NAME
@@ -10,7 +10,7 @@ resolve - Advanced name resolution for Tcl Scripts
 
 # SYNOPSIS
 
-**package require resolve** ?0.2?
+**package require resolve** ?0.7?
 
 **resolve::resolver instvar** *instancevar* ?**-implementation** **getaddrinfo_a**|**getaddrinfo**?
 
@@ -30,6 +30,8 @@ resolve - Advanced name resolution for Tcl Scripts
 
 *instance* **destroy**
 
+**resolve::getnameinfo** ?**-ip** *addr*? ?**-port** *port*? ?**-namerequired**? ?**-noidn**? ?**-dgram**? ?**-nofqdn**? ?**-numerichost**? ?**-numericserv**?
+
 # DESCRIPTION
 
 Provides additional name resolution capabilities to Tcl scripts, like asynchronous
@@ -38,9 +40,9 @@ standard c library's name resolution functions, so the system config is respecte
 order and precedence of sources like the hosts file and DNS.
 
 This package is designed as a thin layer around the POSIX standard function getaddrinfo
-(and the GNU async extension getaddrinfo_a), so a lot of their dynamics show through in
-the names of flags and protocols and such.  A good companion to this document is the
-man page for getaddrinfo(3).
+(and the GNU async extension getaddrinfo_a) and getnameinfo, so a lot of their
+dynamics show through in the names of flags and protocols and such.  A good
+companion to this document is the man pages for getaddrinfo(3) and getnameinfo(3).
 
 
 # COMMANDS
@@ -90,6 +92,13 @@ man page for getaddrinfo(3).
 	the **resolver** class uses gc_class, it is also possible to just let the *instancevar* variable
 	go out of scope and the instance will be automatically destroyed.
 
+**resolve::getnameinfo** ?**-ip** *addr*? ?**-port** *port*? ?**-namerequired**? ?**-noidn**? ?**-dgram**? ?**-nofqdn**? ?**-numerichost**? ?**-numericserv**?
+:	Resolve a hostname given a numeric address, a service name given a numeric port, or both.
+	If **-ip** is specified, the numeric *addr* will be resolved, and the returned dictionary will
+	contain a **host** key containing the result.  If **-port** is specified, the numeric *port* will
+	be resolved to a service name, and the returned dictionary will contain a **serv** key containing
+	the result.  See **GETNAMEINFO FLAGS** for the meaning of the other flags.
+
 
 # ADD OPTIONS
 
@@ -111,10 +120,10 @@ Some options are available when adding a request to control the type of matches 
 	stream protocols, *SOCK_DGRAM* only datagram protocols.
 
 **-flags** *list of flags*
-:	Modify the request with the set of flags specified.  See **FLAGS** for the available choices.
+:	Modify the request with the set of flags specified.  See **ADD FLAGS** for the available choices.
 
 
-# FLAGS
+# ADD FLAGS
 
 **AI_PASSIVE**
 :	Return results suitable for binding to a listening socket, so :http -> 0.0.0.0:80.  Without
@@ -141,6 +150,35 @@ Some options are available when adding a request to control the type of matches 
 
 **AI_NUMERICSERV**
 :	Prevent a lookup of the supplied service.
+
+
+# GETNAMEINFO FLAGS
+
+**-namerequired**
+:	Require that the supplied address can be resolved to a name.  Without this flag if the lookup
+	fails the numeric address will be returned in its place, with it the command with throw an
+	exception **RESOLVE GAI EAI_NONAME** if the lookup fails.  Corresponds to the flag **NI_NAMEREQD**.
+
+**-noidn**
+:	Disable automatic conversion of the result from IDN format to the locale's encoding.  By default
+	conversion is enabled for systems that support it (not musl).  Corresponds to the absence of the
+	**NI_IDN** flag.
+
+**-dgram**
+:	Look up the supplied port as a datagram socket.  Only affects the few ports that have different
+	services for TCP and UDP (512-514).  Corresponds to the **NI_DGRAM** flag.
+
+**-nofqdn**
+:	Return only the hostname portion not the domain for local hosts.  Corresponds to the **NI_FQDN**
+	flag.
+
+**-numerichost**
+:	Disable the lookup of the host, return the numeric address in its place.  Corresponds to the
+	**NI_NUMERICHOST** flag.
+
+**-numericserv**
+:	Disable the lookup of the service, return the numeric port in its place.  Corresponds to the
+	**NI_NUMERICSERV** flag.
 
 
 # SIGNALS EXPORTED
@@ -194,13 +232,34 @@ result for www.rubylane.com:https: 35.169.104.128:443 34.195.117.50:443
 result for google.com: 172.217.170.46 2c0f:fb50:4002:804::200e
 ~~~
 
+Reverse lookup on 8.8.8.8:
+
+~~~tcl
+resolve::getnameinfo -ip 8.8.8.8
+# Returns {host dns.google}
+~~~
+
+Lookup service for port 80:
+
+~~~tcl
+resolve::getnameinfo -port 80
+# Returns {serv http}
+~~~
+
+Lookup IPv6 and service, throw error if the name couldn't be resolved:
+
+~~~tcl
+resolve::getnameinfo -ip ::1 -port 443
+# Returns {host localhost serv https}
+~~~
+
 # SEE ALSO
 
-getaddrinfo(3)
+getaddrinfo(3), getnameinfo(3)
 
 
 # LICENSE
 
-This package is Copyright 2021 Cyan Ogilvie, and is made available under the
+This package is Copyright 2022 Cyan Ogilvie, and is made available under the
 same license terms as the Tcl Core
 

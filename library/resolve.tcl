@@ -275,12 +275,12 @@ namespace eval ::resolve {
 		}
 
 		set flags	{}
-		if {$namerequired}	{lappend flags NI_NAMEREQD}
-		if {!$noidn}		{lappend flags NI_IDN}		;# IDN is the default
-		if {$dgram}			{lappend flags NI_DGRAM}
-		if {$nofqdn}		{lappend flags NI_NOFQDN}
-		if {$numerichost}	{lappend flags NI_NUMERICHOST}
-		if {$numericserv}	{lappend flags NI_NUMERICSERV}
+		if {$namerequired}			{lappend flags NI_NAMEREQD}
+		if {[_have_idn] && !$noidn}	{lappend flags NI_IDN}		;# IDN is the default, except on systems that don't support it (musl)
+		if {$dgram}					{lappend flags NI_DGRAM}
+		if {$nofqdn}				{lappend flags NI_NOFQDN}
+		if {$numerichost}			{lappend flags NI_NUMERICHOST}
+		if {$numericserv}			{lappend flags NI_NUMERICSERV}
 
 		lassign [if {[string match *:* $ip]} {
 			_getnameinfo_ipv6 $ip $port $flags

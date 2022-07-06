@@ -45,6 +45,8 @@ struct interp_cx {
 	int			pipe[2];		/* Results ready signal pipe from getaddrinfo_a */
 	Tcl_Channel	pipechan[2];
 	Tcl_Obj*	empty;
+	Tcl_Obj*	t;
+	Tcl_Obj*	f;
 };
 
 struct gai_cx {

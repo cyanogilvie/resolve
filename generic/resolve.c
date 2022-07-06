@@ -657,6 +657,20 @@ done:
 }
 
 //>>>
+static int have_idn_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
+{
+	struct interp_cx*	l = Tcl_GetAssocData(interp, "resolve", NULL);
+#ifdef NI_IDN
+	const int			have_idn = 1;
+#else
+	const int			have_idn = 0;
+#endif
+	CHECK_ARGS(0, "");
+	Tcl_SetObjResult(interp, have_idn ? l->t : l->f);
+	return TCL_OK;
+}
+
+//>>>
 static int compile_hints_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
 	struct addrinfo	hints;
@@ -752,7 +766,11 @@ void free_interp_cx(ClientData cdata, Tcl_Interp* interp) //<<<
 		Tcl_UnregisterChannel(interp, l->pipechan[PIPE_R]);  l->pipechan[PIPE_R] = NULL;
 		l->pipe[PIPE_W] = -1;
 		l->pipe[PIPE_R] = -1;
+
 		replace_tclobj(&l->empty, NULL);
+		replace_tclobj(&l->t, NULL);
+		replace_tclobj(&l->f, NULL);
+
 		ckfree(l);  l = NULL;
 	}
 }
@@ -795,7 +813,11 @@ DLLEXPORT int Resolve_Init(Tcl_Interp* interp) //<<<
 	}
 	l->pipechan[PIPE_R] = Tcl_MakeFileChannel(INT2PTR(l->pipe[PIPE_R]), TCL_READABLE);
 	l->pipechan[PIPE_W] = Tcl_MakeFileChannel(INT2PTR(l->pipe[PIPE_W]), TCL_WRITABLE);
+
 	replace_tclobj(&l->empty, Tcl_NewObj());
+	replace_tclobj(&l->t, Tcl_NewBooleanObj(1));
+	replace_tclobj(&l->f, Tcl_NewBooleanObj(0));
+
 	Tcl_SetChannelOption(interp, l->pipechan[PIPE_R], "-translation", "binary");
 	Tcl_SetChannelOption(interp, l->pipechan[PIPE_R], "-buffering",   "none");
 	Tcl_SetChannelOption(interp, l->pipechan[PIPE_W], "-translation", "binary");
@@ -818,6 +840,7 @@ DLLEXPORT int Resolve_Init(Tcl_Interp* interp) //<<<
 #endif
 	Tcl_CreateObjCommand(interp, NS "::_getnameinfo_ipv4", getnameinfo_ipv4_cmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, NS "::_getnameinfo_ipv6", getnameinfo_ipv6_cmd, NULL, NULL);
+	Tcl_CreateObjCommand(interp, NS "::_have_idn", have_idn_cmd, NULL, NULL);
 
 #ifdef USE_RESOLVE_STUBS
 	//TEST_OK(Tcl_PkgProvideEx(interp, PACKAGE_NAME, PACKAGE_VERSION, resolveStubs));
