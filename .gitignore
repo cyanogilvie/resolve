@@ -10,5 +10,6 @@ configure
 config.status
 config.log
 doc/resolve.n
+dockerbuild
 last
 tags

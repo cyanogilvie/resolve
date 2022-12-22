@@ -249,8 +249,13 @@ test: binaries libraries
 	$(TCLSH) `@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS) \
 	    -load "set dir $(top_builddir); source $(top_builddir)/pkgIndex.tcl"
 
-test-container: clean
-	docker-compose run --rm resolve test TESTFLAGS="$(TESTFLAGS)"
+PLATFORM=linux/amd64
+test-container:
+	docker run --rm -it --platform $(PLATFORM) -v "$(realpath $(srcdir)):/src/resolvelocal:ro" cyanogilvie/alpine-tcl:v0.9.58-gdb /src/resolvelocal/dtest.tcl "$(TESTFLAGS)"
+
+build-container:
+	mkdir -p "$(top_builddir)/dockerbuild"
+	docker run --rm -it --platform $(PLATFORM) -v "$(realpath $(srcdir)):/src/resolvelocal:ro" -v "$(top_builddir)/dockerbuild:/install" cyanogilvie/alpine-tcl:v0.9.58-gdb /src/resolvelocal/dbuild.tcl "$(shell id -u)" "$(shell id -g)"
 
 benchmark: binaries libraries
 	$(TCLSH) `@CYGPATH@ $(srcdir)/bench/run.tcl` $(TESTFLAGS) -load "set dir $(top_builddir); source $(top_builddir)/pkgIndex.tcl"
@@ -389,6 +394,7 @@ clean:
 	-test -z "$(BINARIES)" || rm -f $(BINARIES)
 	-rm -f *.$(OBJEXT) core *.core
 	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
+	-rm -rf dockerbuild
 
 distclean: clean
 	-rm -f *.tab.c
@@ -469,7 +475,7 @@ uninstall-binaries:
 	done
 
 .PHONY: all binaries clean depend distclean doc install libraries test
-.PHONY: gdb gdb-test valgrind valgrindshell
+.PHONY: gdb gdb-test valgrind valgrindshell test-container build-container
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

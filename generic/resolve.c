@@ -203,6 +203,41 @@ done:
 }
 
 //>>>
+static int handle_response_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
+{
+	struct interp_cx*	l = Tcl_GetAssocData(interp, "resolve", NULL);
+	struct pipe_msg		msg;
+	int					got = read(l->pipe[PIPE_R], &msg, sizeof(msg));
+
+	if (got == -1) {
+		int		e = Tcl_GetErrno();
+
+		// TODO: handle EINTR?
+		Tcl_SetErrorCode(interp, "RESOLVE", "RESPONSE", Tcl_ErrnoId());
+		Tcl_SetObjResult(interp, Tcl_ObjPrintf("Error reading from response pipe: %s", Tcl_ErrnoMsg(e)));
+		return TCL_ERROR;
+	}
+
+	if (msg.msg) {
+		int		retcode = TCL_OK;
+
+		//Tcl_Obj*	cb = NULL;
+		//replace_tclobj(&cb, Tcl_NewStringObj(msg.msg, msg.len));
+		retcode = Tcl_EvalEx(interp, msg.msg, msg.len, TCL_EVAL_GLOBAL);
+		free(msg.msg);
+		msg.msg = NULL;
+		return retcode;
+	} else {
+		/* msg.msg could be NULL if the strdup failed to allocate memory for the copy.  Things are far gone
+		 * if that is the case, but at least don't make things worse here by segfaulting.
+		 * Of course, in that case this error reporting will probably fail anyway, but maybe zippy still has
+		 * some memory available where malloc didn't */
+		Tcl_SetObjResult(interp, Tcl_ObjPrintf("%s", "Error retrieving response, probably due to memory exhaustion"));
+		return TCL_ERROR;
+	}
+}
+
+//>>>
 #if HAVE_GETADDRINFO_A
 static void free_gai_cx(struct gai_cx* cx) //<<<
 {
@@ -298,41 +333,6 @@ static void notify_thread(sigval_t arg) //<<<
 	if (cx->outstanding <= 0) {
 		free_gai_cx(cx);
 		cx = NULL;
-	}
-}
-
-//>>>
-static int handle_response_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
-{
-	struct interp_cx*	l = Tcl_GetAssocData(interp, "resolve", NULL);
-	struct pipe_msg		msg;
-	int					got = read(l->pipe[PIPE_R], &msg, sizeof(msg));
-
-	if (got == -1) {
-		int		e = Tcl_GetErrno();
-
-		// TODO: handle EINTR?
-		Tcl_SetErrorCode(interp, "RESOLVE", "RESPONSE", Tcl_ErrnoId());
-		Tcl_SetObjResult(interp, Tcl_ObjPrintf("Error reading from response pipe: %s", Tcl_ErrnoMsg(e)));
-		return TCL_ERROR;
-	}
-
-	if (msg.msg) {
-		int		retcode = TCL_OK;
-
-		//Tcl_Obj*	cb = NULL;
-		//replace_tclobj(&cb, Tcl_NewStringObj(msg.msg, msg.len));
-		retcode = Tcl_EvalEx(interp, msg.msg, msg.len, TCL_EVAL_GLOBAL);
-		free(msg.msg);
-		msg.msg = NULL;
-		return retcode;
-	} else {
-		/* msg.msg could be NULL if the strdup failed to allocate memory for the copy.  Things are far gone
-		 * if that is the case, but at least don't make things worse here by segfaulting.
-		 * Of course, in that case this error reporting will probably fail anyway, but maybe zippy still has
-		 * some memory available where malloc didn't */
-		Tcl_SetObjResult(interp, Tcl_ObjPrintf("%s", "Error retrieving response, probably due to memory exhaustion"));
-		return TCL_ERROR;
 	}
 }
 
@@ -877,9 +877,9 @@ DLLEXPORT int Resolve_Init(Tcl_Interp* interp) //<<<
 
 	Tcl_CreateObjCommand(interp, NS "::_getaddrinfo_threadworker", getaddrinfo_threadworker_cmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, NS "::_compile_hints", compile_hints_cmd, NULL, NULL);
+	Tcl_CreateObjCommand(interp, NS "::_handle_response", handle_response_cmd, NULL, NULL);
 #if HAVE_GETADDRINFO_A
 	Tcl_CreateObjCommand(interp, NS "::_getaddrinfo_a", getaddrinfo_a_cmd, NULL, NULL);
-	Tcl_CreateObjCommand(interp, NS "::_handle_response", handle_response_cmd, NULL, NULL);
 #endif
 	Tcl_CreateObjCommand(interp, NS "::_getnameinfo_ipv4", getnameinfo_ipv4_cmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, NS "::_getnameinfo_ipv6", getnameinfo_ipv6_cmd, NULL, NULL);

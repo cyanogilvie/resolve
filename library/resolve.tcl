@@ -26,6 +26,7 @@ namespace eval ::resolve {
 			::resolve::_handle_response
 		} on error {errmsg options} {
 			::resolve::log error "Error handling response ([dict get $options -errorcode]): [dict get $options -errorinfo]"
+			return -options $options $errmsg
 		}
 	}
 
