@@ -131,23 +131,29 @@ static void append_outcome(Tcl_DString* ds, const char* name, const char* servic
 }
 
 //>>>
-static int getaddrinfo_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
+static int getaddrinfo_threadworker_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
 	int						retcode = TCL_OK;
 	const char*				name = NULL;
 	const char*				service = NULL;
+	const char*				cb_str = NULL;
 	const struct addrinfo*	hints = NULL;
 	int						hints_len, rc;
 	struct addrinfo*		res = NULL;
-	Tcl_DString				addrlist;
+	Tcl_DString				cb;
+	struct pipe_msg			msg;
+	int						cb_len;
+	int						pipe_w;
 
-	CHECK_ARGS(3, "name service compiled_hints");
+	CHECK_ARGS(5, "name service pipe_w cb compiled_hints");
 
-	Tcl_DStringInit(&addrlist);
+	Tcl_DStringInit(&cb);
 
 	name = Tcl_GetString(objv[1]);
 	service = Tcl_GetString(objv[2]);
-	hints = (const struct addrinfo*)Tcl_GetByteArrayFromObj(objv[3], &hints_len);
+	TEST_OK_LABEL(done, retcode, Tcl_GetIntFromObj(interp, objv[3], &pipe_w));
+	cb_str = Tcl_GetStringFromObj(objv[4], &cb_len);
+	hints = (const struct addrinfo*)Tcl_GetByteArrayFromObj(objv[5], &hints_len);
 
 	if (name[0] == 0)    name = NULL;
 	if (service[0] == 0) service = NULL;
@@ -158,14 +164,36 @@ static int getaddrinfo_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_O
 	if (hints_len != sizeof(*hints))
 		THROW_ERROR_LABEL(done, retcode, "Compiled hints is the wrong size");
 
-	Tcl_DStringInit(&addrlist);
+	Tcl_DStringAppend(&cb, cb_str, cb_len);
 
+	Tcl_DStringStartSublist(&cb);
 	rc = getaddrinfo(name, service, hints, &res);
-	append_outcome(&addrlist, name, service, rc, res, service != NULL);
-	Tcl_DStringResult(interp, &addrlist);
+	append_outcome(&cb, name, service, rc, res, service != NULL);
+	Tcl_DStringEndSublist(&cb);
+
+	/* Send only the len and a pointer to a copy of the string - that way the message is fixed-length,
+	 * and short enough to be guaranteed not interleved with other writes by POSIX pipe semantics */
+	msg.len = Tcl_DStringLength(&cb);
+	msg.msg = strdup(Tcl_DStringValue(&cb));
+
+	size_t					remain = sizeof(msg);
+	const unsigned char*	bytes = (const unsigned char*)&msg;
+	ssize_t					got;
+
+again:
+	got = write(pipe_w, bytes, remain);
+	if (got == -1) {
+		if (errno == EINTR) goto again;
+		THROW_POSIX_LABEL(done, retcode, "Error writing getaddrinfo to pipe_w");
+	} else if (got < remain) {
+		// I think pipe semantics guarantees we can't land here
+		remain -= got;
+		bytes += got;
+		goto again;
+	}
 
 done:
-	Tcl_DStringFree(&addrlist);
+	Tcl_DStringFree(&cb);
 
 	if (res) {
 		freeaddrinfo(res);
@@ -762,8 +790,15 @@ void free_interp_cx(ClientData cdata, Tcl_Interp* interp) //<<<
 	struct interp_cx*	l = cdata;
 
 	if (l) {
-		Tcl_UnregisterChannel(interp, l->pipechan[PIPE_W]);  l->pipechan[PIPE_W] = NULL;
+		if (!Tcl_InterpDeleted(interp)) {
+			if (TCL_OK != Tcl_EvalEx(interp, "::resolve::_unload", -1, TCL_EVAL_GLOBAL)) {
+				fprintf(stderr, "Error running ::resolve::_unload: %s\n", Tcl_GetString(Tcl_GetObjResult(interp)));
+			}
+		}
 		Tcl_UnregisterChannel(interp, l->pipechan[PIPE_R]);  l->pipechan[PIPE_R] = NULL;
+		if (-1 == close(l->pipe[PIPE_W]))
+			perror("close pipe_w");
+
 		l->pipe[PIPE_W] = -1;
 		l->pipe[PIPE_R] = -1;
 
@@ -812,7 +847,6 @@ DLLEXPORT int Resolve_Init(Tcl_Interp* interp) //<<<
 		return TCL_ERROR;
 	}
 	l->pipechan[PIPE_R] = Tcl_MakeFileChannel(INT2PTR(l->pipe[PIPE_R]), TCL_READABLE);
-	l->pipechan[PIPE_W] = Tcl_MakeFileChannel(INT2PTR(l->pipe[PIPE_W]), TCL_WRITABLE);
 
 	replace_tclobj(&l->empty, Tcl_NewObj());
 	replace_tclobj(&l->t, Tcl_NewBooleanObj(1));
@@ -820,19 +854,28 @@ DLLEXPORT int Resolve_Init(Tcl_Interp* interp) //<<<
 
 	Tcl_SetChannelOption(interp, l->pipechan[PIPE_R], "-translation", "binary");
 	Tcl_SetChannelOption(interp, l->pipechan[PIPE_R], "-buffering",   "none");
-	Tcl_SetChannelOption(interp, l->pipechan[PIPE_W], "-translation", "binary");
-	Tcl_SetChannelOption(interp, l->pipechan[PIPE_W], "-buffering",   "none");
 	Tcl_RegisterChannel(interp, l->pipechan[PIPE_R]);
-	Tcl_RegisterChannel(interp, l->pipechan[PIPE_W]);
-	if (NULL == Tcl_SetVar(interp, NS "::_result_pipe", Tcl_GetChannelName(l->pipechan[PIPE_R]), TCL_LEAVE_ERR_MSG)) {
+	Tcl_Obj*	pipe_r_varname = NULL;
+	replace_tclobj(&pipe_r_varname, Tcl_NewStringObj(NS "::_result_pipe", -1));
+	if (NULL == Tcl_ObjSetVar2(interp, pipe_r_varname, NULL, Tcl_NewStringObj(Tcl_GetChannelName(l->pipechan[PIPE_R]), -1), TCL_LEAVE_ERR_MSG)) {
+		replace_tclobj(&pipe_r_varname, NULL);
 		free_interp_cx(l, interp);
 		return TCL_ERROR;
 	}
+	replace_tclobj(&pipe_r_varname, NULL);
+	Tcl_Obj*	pipe_w_varname = NULL;
+	replace_tclobj(&pipe_w_varname, Tcl_NewStringObj(NS "::_result_pipe_w", -1));
+	if (NULL == Tcl_ObjSetVar2(interp, pipe_w_varname, NULL, Tcl_NewIntObj(l->pipe[PIPE_W]), TCL_LEAVE_ERR_MSG)) {
+		replace_tclobj(&pipe_w_varname, NULL);
+		free_interp_cx(l, interp);
+		return TCL_ERROR;
+	}
+	replace_tclobj(&pipe_w_varname, NULL);
 	// IPC pipe >>>
 
 	Tcl_SetAssocData(interp, "resolve", free_interp_cx, l);
 
-	Tcl_CreateObjCommand(interp, NS "::_getaddrinfo", getaddrinfo_cmd, NULL, NULL);
+	Tcl_CreateObjCommand(interp, NS "::_getaddrinfo_threadworker", getaddrinfo_threadworker_cmd, NULL, NULL);
 	Tcl_CreateObjCommand(interp, NS "::_compile_hints", compile_hints_cmd, NULL, NULL);
 #if HAVE_GETADDRINFO_A
 	Tcl_CreateObjCommand(interp, NS "::_getaddrinfo_a", getaddrinfo_a_cmd, NULL, NULL);
@@ -864,9 +907,8 @@ DLLEXPORT int Resolve_Unload(Tcl_Interp* interp, int flags) //<<<
 	int					retcode = TCL_OK;
 	Tcl_Namespace*		ns = NULL;
 
-	if (flags == TCL_UNLOAD_DETACH_FROM_PROCESS) {
-		// Must happen before the below cleanup
-		retcode = Tcl_EvalEx(interp, "::resolve::_unload", -1, TCL_EVAL_GLOBAL);
+	if (!Tcl_InterpDeleted(interp)) {
+		Tcl_DeleteAssocData(interp, "resolve");
 	}
 
 	ns = Tcl_FindNamespace(interp, "::resolve", NULL, TCL_GLOBAL_ONLY);
@@ -874,8 +916,6 @@ DLLEXPORT int Resolve_Unload(Tcl_Interp* interp, int flags) //<<<
 		Tcl_DeleteNamespace(ns);
 		ns = NULL;
 	}
-
-	Tcl_DeleteAssocData(interp, "resolve");
 
 	return retcode;
 }

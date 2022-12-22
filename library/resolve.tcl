@@ -21,6 +21,7 @@ namespace eval ::resolve {
 	# Internal machinery <<<
 	# _handle_response defined in c, $_result_pipe set from c during init
 	proc _result_pipe_readable {} { #<<<
+		#::resolve::log notice "_result_pipe_readable"
 		try {
 			::resolve::_handle_response
 		} on error {errmsg options} {
@@ -47,8 +48,11 @@ namespace eval ::resolve {
 			if {![tsv::exists _resolve pool]} {
 				package require Thread
 				set pool	[tpool::create -minworkers 1 -initcmd {load {} Resolve}]
-				tpool::preserve $pool
 				tsv::set _resolve pool $pool
+			}
+			if {![info exists ::resolve::_pool_reffed]} {
+				tpool::preserve [tsv::get _resolve pool]
+				set ::resolve::_pool_reffed 1
 			}
 		}
 
@@ -59,8 +63,10 @@ namespace eval ::resolve {
 	proc _unload {} { # Internal handler for things to be cleaned up when the package is unloaded <<<
 		tsv::lock _resolve {
 			if {[tsv::exists _resolve pool]} {
-				tpool::release [tsv::get _resolve pool]
-				tsv::unset _resolve
+				if {[info exists ::resolve::_pool_reffed]} {
+					tpool::release [tsv::get _resolve pool]
+					unset ::resolve::_pool_reffed
+				}
 			}
 		}
 	}
@@ -163,7 +169,13 @@ namespace eval ::resolve {
 					package require Thread
 					foreach req $reqs {
 						lassign $req host service hints
-						set thread_script	"[list thread::send -async [thread::id]] \[list [list ::resolve::_resolver_response [self]] \[try {[list ::resolve::_getaddrinfo $host $service] \[binary decode hex [binary encode hex $hints]\]} on error {errmsg options} {list [list $host $service] tclerror \$options \$errmsg}\]\]"
+						set thread_script	[subst {
+							try {
+								[list ::resolve::_getaddrinfo_threadworker $host $service $::resolve::_result_pipe_w [list ::resolve::_resolver_response [self]]] \[binary decode hex [binary encode hex $hints]\]
+							} on error {errmsg options} {
+								puts stderr "resolve pool thread \[thread::id\] got error: \$errmsg"
+							}
+						}]
 						tpool::post -detached -nowait [::resolve::_pool] $thread_script
 					}
 				}

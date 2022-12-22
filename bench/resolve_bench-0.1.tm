@@ -431,6 +431,11 @@ proc run_benchmarks {dir args} { #<<<
 				}
 			}
 
+			-load {
+				lassign [apply $consume_args 1] load_script
+				uplevel #0 $load_script
+			}
+
 			default {
 				throw [list BENCH INVALID_ARG $next] \
 					"Invalid argument: \"$next\""

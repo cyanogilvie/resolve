@@ -1,0 +1,24 @@
+if {[lsearch [namespace children] ::tcltest] == -1} {
+    package require tcltest
+    namespace import ::tcltest::*
+}
+
+loadTestedCommands
+
+test unload-1.0 {Unregister from interp (slave interp delete)} -setup { #<<<
+	set slave	[interp create]
+} -body {
+	$slave eval "[tcltest::configure -load]\npackage require resolve"
+	$slave eval {unload $::resolve::libfile}
+	$slave eval {namespace exists ::resolve}
+} -cleanup {
+	interp delete $slave
+	unset -nocomplain slave
+} -result 0
+#>>>
+
+# cleanup
+::tcltest::cleanupTests
+return
+
+# vim: ft=tcl foldmethod=marker foldmarker=<<<,>>> ts=4 shiftwidth=4

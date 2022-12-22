@@ -3,13 +3,15 @@ if {[lsearch [namespace children] ::tcltest] == -1} {
     namespace import ::tcltest::*
 }
 
+loadTestedCommands
+
 try {package require resolve} on error {errmsg options} {
 	puts stderr "Error loading resolve: [dict get $options -errorinfo]"
 	return -options $options $errmsg
 }
 
 testConstraint have_getaddrinfo_a	[expr {[llength [info commands ::resolve::_getaddrinfo_a]] > 0}]
-testConstraint have_getaddrinfo		[expr {[llength [info commands ::resolve::_getaddrinfo]] > 0}]
+testConstraint have_getaddrinfo		[expr {[llength [info commands ::resolve::_getaddrinfo_threadworker]] > 0}]
 
 proc expect_address args { #<<<
 	::parse_args::parse_args $args {
@@ -133,6 +135,61 @@ set tests {
 		1 {RESOLVE EAI_SERVICE {}} {Failed to resolve :exec} \
 		1 {RESOLVE EAI_SERVICE {}} {Failed to resolve :foo}
 	]
+	#>>>
+	test resolver_${imp}_${mode}-3.1 {slave interp} -constraints have_$imp -body { #<<<
+		set slave	[interp create]
+
+		$slave eval "[tcltest::configure -load]\npackage require resolve"
+		$slave eval [list resolve::resolver instvar r -implementation $imp]
+		expect_address -count 2 -family ipv4 [$slave eval {$r add rubylane.com; $r get rubylane.com}]
+	} -cleanup {
+		interp delete $slave
+		unset -nocomplain slave res
+	} -result matches
+	#>>>
+	test resolver_${imp}_${mode}-3.2 {two threads} -constraints have_$imp -body { #<<<
+		package require Thread
+		set tid	[thread::create -joinable -preserved]
+		thread::send $tid "[tcltest::configure -load]\npackage require resolve"
+		list [expect_address -count 2 -family ipv4 [thread::send $tid [string map [list \
+			%imp%	[list $imp] \
+		] {
+			resolve::resolver instvar r -implementation %imp%
+			$r add rubylane.com
+			$r get rubylane.com
+		}]]] [expect_address -count 2 -family ipv4 [eval {
+			resolve::resolver instvar r -implementation $imp
+			$r add rubylane.com
+			$r get rubylane.com
+		}]]
+	} -cleanup {
+		if {[info exists tid]} {thread::release $tid; thread::join $tid}
+		unset -nocomplain r tid
+	} -result {matches matches}
+	#>>>
+	test resolver_${imp}_${mode}-3.3 {two threads, slave interp} -constraints have_$imp -body { #<<<
+		set slave	[interp create]
+		$slave eval "[tcltest::configure -load]\npackage require resolve; set imp [list $imp]"
+		$slave eval [list resolve::resolver instvar r -implementation $imp]
+		package require Thread
+		set tid	[thread::create -joinable -preserved]
+		thread::send $tid "[tcltest::configure -load]\npackage require resolve"
+		list [expect_address -count 2 -family ipv4 [thread::send $tid [string map [list \
+			%imp%	[list $imp] \
+		] {
+			resolve::resolver instvar r -implementation %imp%
+			$r add rubylane.com
+			$r get rubylane.com
+		}]]] [expect_address -count 2 -family ipv4 [$slave eval {
+			resolve::resolver instvar r -implementation $imp
+			$r add rubylane.com
+			$r get rubylane.com
+		}]]
+	} -cleanup {
+		if {[info exists tid]} {thread::release $tid; thread::join $tid}
+		interp delete $slave
+		unset -nocomplain r tid slave
+	} -result {matches matches}
 	#>>>
 
 }

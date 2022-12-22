@@ -128,3 +128,71 @@
    fun:_dl_open
    fun:do_dlopen
 }
+{
+	thread_lmdb
+	Memcheck:Leak
+	...
+	fun:Sv_RegisterPsStore
+	...
+	fun:SvInit
+	fun:ThreadInit
+	...
+}
+{
+	TclpSetVariables
+	Memcheck:Leak
+	...
+	fun:TclpSetVariables
+	...
+}
+{
+	Newthread
+	Memcheck:Leak
+	...
+	fun:Tcl_SetVar2
+	fun:Tcl_CreateInterp
+	fun:TpoolWorker
+	fun:NewThreadProc
+}
+{
+   gai_a_free
+   Memcheck:Cond
+   fun:free
+   fun:free_res
+   fun:__libc_freeres
+   fun:_vgnU_freeres
+   fun:__run_exit_handlers
+   fun:exit
+   fun:Tcl_Exit
+   fun:Tcl_ExitObjCmd
+}
+{
+   gai_a_free
+   Memcheck:Free
+   fun:free
+   fun:free_res
+   fun:__libc_freeres
+   fun:_vgnU_freeres
+   fun:__run_exit_handlers
+   fun:exit
+   fun:Tcl_Exit
+   fun:Tcl_ExitObjCmd
+}
+{
+   gai_a_stack
+   Memcheck:Leak
+   fun:allocate_stack
+   ...
+   fun:__gai_notify
+   fun:__gai_notify
+   fun:handle_requests
+   fun:start_thread
+   ...
+}
+{
+	SVLockObjCmd
+	Memcheck:Leak
+	...
+	fun:SvLockObjCmd
+	...
+}

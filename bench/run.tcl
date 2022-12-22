@@ -8,7 +8,7 @@ set here	[file dirname [file normalize [info script]]]
 tcl::tm::path add $here
 
 package require platform
-package require bench
+puts stderr "loaded resolve_bench: [package require resolve_bench]"
 
 proc with_chan {var create use} {
 	upvar 1 $var h
@@ -36,10 +36,9 @@ proc main {} {
 	try {
 		set here	[file dirname [file normalize [info script]]]
 		# Ensure that we load the version from our source repo even if the system already has a version
-		set srcver	[lindex $::argv 0]
 		benchmark_mode {
 			puts "[string repeat - 80]\nStarting benchmarks\n"
-			bench::run_benchmarks $here {*}[lrange $::argv 1 end]
+			bench::run_benchmarks $here {*}$::argv
 		}
 	} on ok {} {
 		exit 0

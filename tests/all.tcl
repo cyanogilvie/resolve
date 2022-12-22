@@ -61,7 +61,9 @@ foreach file [lsort [::tcltest::getMatchingFiles]] {
 puts $chan "\nTests ended at [eval $timeCmd]"
 ::tcltest::cleanupTests 1
 
-puts stderr "Unloading $::resolve::libfile"
-unload $::resolve::libfile
+if {[info exists ::resolve::libfile]} {
+	puts stderr "Unloading $::resolve::libfile"
+	unload $::resolve::libfile
+}
 return
 

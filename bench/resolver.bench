@@ -14,7 +14,7 @@ proc main {} {
 			llength [$r get www.rubylane.com]
 		}
 		_getaddrinfo {
-			::resolve::resolver instvar r -implementation getaddrinfo_a
+			::resolve::resolver instvar r -implementation getaddrinfo
 			$r add www.rubylane.com
 			llength [$r get www.rubylane.com]
 		}

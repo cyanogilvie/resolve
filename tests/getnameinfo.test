@@ -3,6 +3,8 @@ if {[lsearch [namespace children] ::tcltest] == -1} {
     namespace import ::tcltest::*
 }
 
+loadTestedCommands
+
 try {package require resolve} on error {errmsg options} {
 	puts stderr "Error loading resolve: [dict get $options -errorinfo]"
 	return -options $options $errmsg
@@ -10,11 +12,11 @@ try {package require resolve} on error {errmsg options} {
 
 test getnameinfo_ipv4-0.1 {Too few args} -body { #<<<
 	::resolve::_getnameinfo_ipv4 {} {}
-} -returnCodes error -result {Wrong # of arguments.  Must be "addr port flags"}
+} -returnCodes error -result {wrong # args: should be "::resolve::_getnameinfo_ipv4 addr port flags"}
 #>>>
 test getnameinfo_ipv4-0.2 {Too many args} -body { #<<<
 	::resolve::_getnameinfo_ipv4 127.0.0.1 {} {} foo
-} -returnCodes error -result {Wrong # of arguments.  Must be "addr port flags"}
+} -returnCodes error -result {wrong # args: should be "::resolve::_getnameinfo_ipv4 addr port flags"}
 #>>>
 test getnameinfo_ipv4-0.3 {Invalid IPv4 address} -body { #<<<
 	::resolve::_getnameinfo_ipv4 127.0.0.0.1 {} {}
@@ -88,11 +90,11 @@ test getnameinfo_ipv4-3.1 {both host and serv} -body { #<<<
 
 test getnameinfo_ipv6-0.1 {Too few args} -body { #<<<
 	::resolve::_getnameinfo_ipv6 {} {}
-} -returnCodes error -result {Wrong # of arguments.  Must be "addr port flags"}
+} -returnCodes error -result {wrong # args: should be "::resolve::_getnameinfo_ipv6 addr port flags"}
 #>>>
 test getnameinfo_ipv6-0.2 {Too many args} -body { #<<<
 	::resolve::_getnameinfo_ipv6 ::1 {} {} foo
-} -returnCodes error -result {Wrong # of arguments.  Must be "addr port flags"}
+} -returnCodes error -result {wrong # args: should be "::resolve::_getnameinfo_ipv6 addr port flags"}
 #>>>
 test getnameinfo_ipv6-0.3 {Invalid ipv6 address} -body { #<<<
 	::resolve::_getnameinfo_ipv6 ::1: {} {}

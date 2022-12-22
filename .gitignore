@@ -10,6 +10,5 @@ configure
 config.status
 config.log
 doc/resolve.n
-tclconfig
 last
 tags

@@ -11,11 +11,11 @@ builtin(include,tclconfig/tcl.m4)
 # All the best stuff seems to be Linux / glibc specific :(
 AC_DEFUN([CHECK_GLIBC], [
 	AC_MSG_CHECKING([for GNU libc])
-	AC_TRY_COMPILE([#include <features.h>], [
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <features.h>]], [[
 #if ! (defined __GLIBC__ || defined __GNU_LIBRARY__)
 #	error "Not glibc"
 #endif
-], glibc=yes, glibc=no)
+]])],[glibc=yes],[glibc=no])
 
 	if test "$glibc" = yes
 	then
@@ -28,13 +28,11 @@ AC_DEFUN([CHECK_GLIBC], [
 
 AC_DEFUN([CHECK_GETADDRINFO_A], [
 	AC_MSG_CHECKING([for getaddrinfo_a])
-	AC_TRY_COMPILE([
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 		#include <netdb.h>
-	], [
+	]], [[
 		void* f = &getaddrinfo_a;
-	],
-		have_getaddrinfo_a=yes,
-		have_getaddrinfo_a=no)
+	]])],[have_getaddrinfo_a=yes],[have_getaddrinfo_a=no])
 
 	if test "$have_getaddrinfo_a" = yes
 	then
@@ -48,14 +46,12 @@ AC_DEFUN([CHECK_GETADDRINFO_A], [
 
 AC_DEFUN([CHECK_PIPE2], [
 	AC_MSG_CHECKING([for pipe2])
-	AC_TRY_COMPILE([
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 		#include <fcntl.h>
 		#include <unistd.h>
-	], [
+	]], [[
 		void* f = &pipe2;
-	],
-		have_pipe2=yes,
-		have_pipe2=no)
+	]])],[have_pipe2=yes],[have_pipe2=no])
 
 	if test "$have_pipe2" = yes
 	then
