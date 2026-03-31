@@ -9,7 +9,11 @@ Makefile
 configure
 config.status
 config.log
+doc/resolve.md
 doc/resolve.n
 dockerbuild
 last
 tags
+subprojects/*-*
+subprojects/packagecache
+subprojects/.wraplock

@@ -3,18 +3,20 @@
 #
 package ifneeded @PACKAGE_NAME@ @PACKAGE_VERSION@ [list apply {
 	dir {
-		if {[package vsatisfies [package provide Tcl] 9.0-]} {
-			set libfile	[file join $dir @PKG_LIB_FILE9@]
-		} else {
-			set libfile	[file join $dir @PKG_LIB_FILE8@]
-		}
-		load $libfile [string totitle @PACKAGE_NAME@]
-		namespace eval ::resolve [list variable libfile $libfile]
+		load [file join $dir @PKG_LIB_FILE@] [string totitle @PACKAGE_NAME@]
+		namespace eval ::resolve [list variable libfile [file join $dir @PKG_LIB_FILE@]]
 		if {[file readable [file join $dir library/resolve.tcl]]} {
-			# In source tree case
+			# In source tree (autotools in-tree build)
 			source [file join $dir library/resolve.tcl]
+		} elseif {[file readable [file join $dir resolve_srcdir.txt]]} {
+			# Dev build (meson / autotools out-of-tree) - breadcrumb has source root
+			set fd [open [file join $dir resolve_srcdir.txt] r]
+			set srcdir [read $fd]
+			close $fd
+			source [file join $srcdir library/resolve.tcl]
+			unset fd srcdir
 		} else {
-			# In installed case
+			# Installed
 			source [file join $dir resolve.tcl]
 		}
 	}

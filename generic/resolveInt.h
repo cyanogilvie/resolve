@@ -1,5 +1,9 @@
-#ifndef _RESOLVE_H
-#define _RESOLVE_H
+#ifndef _RESOLVEINT_H
+#define _RESOLVEINT_H
+
+#if HAVE_CONFIG_H
+#	include <config.h>
+#endif
 
 #include "resolve.h"
 #include "tclstuff.h"
@@ -54,9 +58,9 @@ struct gai_cx {
 	int					pipe_w;
 	struct gaicb**		reqs;
 	struct gaicb*		req;
-	int					req_n;
+	Tcl_Size			req_n;
 	int*				reported;
-	int					outstanding;
+	Tcl_Size			outstanding;
 };
 
 /* The fixed-length pipe message sent back to the thread and interp that is waiting for an async response */

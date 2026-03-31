@@ -1,6 +1,6 @@
-% resolve(3) 0.2 | Advanced Name Resolution for Tcl Scripts
+% @PACKAGE_NAME@(3) @PACKAGE_VERSION@ | Advanced Name Resolution for Tcl Scripts
 % Cyan Ogilvie
-% 0.7
+% @PACKAGE_VERSION@
 
 
 # NAME
@@ -10,7 +10,7 @@ resolve - Advanced name resolution for Tcl Scripts
 
 # SYNOPSIS
 
-**package require resolve** ?0.7?
+**package require resolve** ?@PACKAGE_VERSION@?
 
 **resolve::resolver instvar** *instancevar* ?**-implementation** **getaddrinfo_a**|**getaddrinfo**?
 

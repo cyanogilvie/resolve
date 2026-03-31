@@ -138,12 +138,15 @@ static int getaddrinfo_threadworker_cmd(ClientData cdata, Tcl_Interp* interp, in
 	const char*				service = NULL;
 	const char*				cb_str = NULL;
 	const struct addrinfo*	hints = NULL;
-	int						hints_len, rc;
+	Tcl_Size				hints_len;
+	int						rc;
 	struct addrinfo*		res = NULL;
 	Tcl_DString				cb;
 	struct pipe_msg			msg;
-	int						cb_len;
+	Tcl_Size				cb_len;
 	int						pipe_w;
+
+	(void)cdata;
 
 	CHECK_ARGS(5, "name service pipe_w cb compiled_hints");
 
@@ -161,7 +164,7 @@ static int getaddrinfo_threadworker_cmd(ClientData cdata, Tcl_Interp* interp, in
 	if (!(name || service))
 		THROW_ERROR_LABEL(done, retcode, "At least one of name or service must not be blank");
 	
-	if (hints_len != sizeof(*hints))
+	if (hints_len != (Tcl_Size)sizeof(*hints))
 		THROW_ERROR_LABEL(done, retcode, "Compiled hints is the wrong size");
 
 	Tcl_DStringAppend(&cb, cb_str, cb_len);
@@ -176,7 +179,7 @@ static int getaddrinfo_threadworker_cmd(ClientData cdata, Tcl_Interp* interp, in
 	msg.len = Tcl_DStringLength(&cb);
 	msg.msg = strdup(Tcl_DStringValue(&cb));
 
-	size_t					remain = sizeof(msg);
+	ssize_t					remain = sizeof(msg);
 	const unsigned char*	bytes = (const unsigned char*)&msg;
 	ssize_t					got;
 
@@ -205,6 +208,9 @@ done:
 //>>>
 static int handle_response_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
+	(void)cdata;
+	(void)objc;
+	(void)objv;
 	struct interp_cx*	l = Tcl_GetAssocData(interp, "resolve", NULL);
 	struct pipe_msg		msg;
 	int					got = read(l->pipe[PIPE_R], &msg, sizeof(msg));
@@ -241,7 +247,7 @@ static int handle_response_cmd(ClientData cdata, Tcl_Interp* interp, int objc, T
 #if HAVE_GETADDRINFO_A
 static void free_gai_cx(struct gai_cx* cx) //<<<
 {
-	int		i;
+	Tcl_Size	i;
 
 	if (cx) {
 		if (cx->req) {
@@ -293,7 +299,7 @@ static void free_gai_cx(struct gai_cx* cx) //<<<
 static void notify_thread(sigval_t arg) //<<<
 {
 	struct gai_cx*	cx = (struct gai_cx*)arg.sival_ptr;
-	int				i;
+	Tcl_Size		i;
 	Tcl_DString		cb;
 	struct pipe_msg	msg;
 
@@ -344,9 +350,11 @@ static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 	struct sigevent		sigev;
 	int					rc;
 	struct gai_cx*		cx = NULL;
-	int					i;
+	Tcl_Size			i;
 	Tcl_Obj**			reqv;
-	int					reqc;
+	Tcl_Size			reqc;
+
+	(void)cdata;
 
 	CHECK_ARGS(2, "reqs cb");
 
@@ -372,11 +380,11 @@ static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 
 	for (i=0; i<cx->req_n; i++) {
 		Tcl_Obj**				rfv;
-		int						rfc;
+		Tcl_Size				rfc;
 		const char*				str;
-		int						str_len;
+		Tcl_Size				str_len;
 		const unsigned char*	compiled_req = NULL;
-		int						compiled_req_len;
+		Tcl_Size				compiled_req_len;
 		struct addrinfo*		req = NULL;
 
 		TEST_OK_LABEL(err, retcode, Tcl_ListObjGetElements(interp, reqv[i], &rfc, &rfv));
@@ -403,7 +411,7 @@ static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 		}
 
 		compiled_req = Tcl_GetByteArrayFromObj(rfv[2], &compiled_req_len);
-		if (compiled_req_len != sizeof(struct addrinfo))
+		if (compiled_req_len != (Tcl_Size)sizeof(struct addrinfo))
 			THROW_ERROR_LABEL(err, retcode, "Compiled request is the wrong size");
 
 		req = malloc(compiled_req_len);
@@ -452,8 +460,8 @@ static int _getnameinfo_flags(Tcl_Interp* interp, Tcl_Obj* obj, int* flags) //<<
 	int					retcode = TCL_OK;
 	int					res = 0;
 	Tcl_Obj**			ov = NULL;
-	int					oc;
-	int					i;
+	Tcl_Size			oc;
+	Tcl_Size			i;
 	static const char* flag_str[] = {
 		"NI_NAMEREQD",
 		"NI_DGRAM",
@@ -521,7 +529,9 @@ static int getnameinfo_ipv4_cmd(ClientData cdata, Tcl_Interp* interp, int objc, 
 	socklen_t			servptr_len = NI_MAXSERV;
 	const char*			addr_str = NULL;
 	const char*			serv_str = NULL;
-	int					addr_str_len, serv_str_len;
+	Tcl_Size			addr_str_len, serv_str_len;
+
+	(void)cdata;
 	struct sockaddr_in	addr = {0};
 	socklen_t			addrlen = sizeof(addr);
 	int					rc, flags;
@@ -609,7 +619,9 @@ static int getnameinfo_ipv6_cmd(ClientData cdata, Tcl_Interp* interp, int objc, 
 	socklen_t			servptr_len = NI_MAXSERV;
 	const char*			addr_str = NULL;
 	const char*			serv_str = NULL;
-	int					addr_str_len, serv_str_len;
+	Tcl_Size			addr_str_len, serv_str_len;
+
+	(void)cdata;
 	struct sockaddr_in6	addr = {0};
 	socklen_t			addrlen = sizeof(addr);
 	int					rc, flags;
@@ -687,6 +699,7 @@ done:
 //>>>
 static int have_idn_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
+	(void)cdata;
 	struct interp_cx*	l = Tcl_GetAssocData(interp, "resolve", NULL);
 #ifdef NI_IDN
 	const int			have_idn = 1;
@@ -701,6 +714,7 @@ static int have_idn_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj*
 //>>>
 static int compile_hints_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
+	(void)cdata;
 	struct addrinfo	hints;
 	static const char* family_str[] = {
 		"AF_UNSPEC",
@@ -759,8 +773,8 @@ static int compile_hints_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 	};
 	int flags_idx;
 	Tcl_Obj**		flagv;
-	int				flagc;
-	int				i;
+	Tcl_Size		flagc;
+	Tcl_Size		i;
 
 	CHECK_ARGS(4, "family protocol socktype flags");
 
@@ -823,7 +837,7 @@ DLLEXPORT int Resolve_Init(Tcl_Interp* interp) //<<<
 	int					rc;
 
 #ifdef USE_TCL_STUBS
-	if (Tcl_InitStubs(interp, "8.6", 0) == NULL)
+	if (Tcl_InitStubs(interp, TCL_VERSION, 0) == NULL)
 		return TCL_ERROR;
 #endif
 
@@ -904,6 +918,7 @@ DLLEXPORT int Resolve_SafeInit(Tcl_Interp* interp) //<<<
 //>>>
 DLLEXPORT int Resolve_Unload(Tcl_Interp* interp, int flags) //<<<
 {
+	(void)flags;
 	int					retcode = TCL_OK;
 	Tcl_Namespace*		ns = NULL;
 
