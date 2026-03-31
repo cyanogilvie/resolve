@@ -174,7 +174,7 @@ namespace eval ::resolve {
 							try {
 								[list ::resolve::_getaddrinfo_threadworker $host $service $::resolve::_result_pipe_w [list ::resolve::_resolver_response [self]]] \[binary decode hex [binary encode hex $hints]\]
 							} on error {errmsg options} {
-								puts stderr "resolve pool thread \[thread::id\] got error: \$errmsg"
+								::resolve::log error "resolve pool thread \[thread::id\] got error: \$errmsg"
 							}
 						}]
 						tpool::post -detached -nowait [::resolve::_pool] $thread_script
@@ -196,6 +196,7 @@ namespace eval ::resolve {
 				append name	:$service
 			}
 
+			#::resolve::log notice "resolver [self] got response for $name: $status ($rest)"
 			switch -exact -- $status {
 				ok {
 					set addrs	$rest
