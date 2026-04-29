@@ -1,12 +1,7 @@
 #ifndef _RESOLVEINT_H
 #define _RESOLVEINT_H
 
-#if HAVE_CONFIG_H
-#	include <config.h>
-#endif
-
-#include "resolve.h"
-#include "tclstuff.h"
+#include <config.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -21,6 +16,10 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <errno.h>
+#include <defer.h>
+
+#include <resolve.h>
+#include <tclstuff.h>
 
 // Taken from tclInt.h:
 #if !defined(INT2PTR) && !defined(PTR2INT)

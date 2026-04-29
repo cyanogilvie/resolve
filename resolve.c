@@ -131,45 +131,43 @@ static void append_outcome(Tcl_DString* ds, const char* name, const char* servic
 }
 
 //>>>
-static int getaddrinfo_threadworker_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
+static int getaddrinfo_threadworker_cmd(ClientData /*cdata*/, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
-	int						retcode = TCL_OK;
 	const char*				name = NULL;
 	const char*				service = NULL;
 	const char*				cb_str = NULL;
 	const struct addrinfo*	hints = NULL;
 	Tcl_Size				hints_len;
 	int						rc;
-	struct addrinfo*		res = NULL;
-	Tcl_DString				cb;
 	struct pipe_msg			msg;
 	Tcl_Size				cb_len;
 	int						pipe_w;
+	Tcl_DString				cb;
+	Tcl_DStringInit(&cb);	defer { Tcl_DStringFree(&cb); }
 
-	(void)cdata;
+	enum {A_cmd, A_NAME, A_SERVICE, A_PIPE_W, A_CB, A_COMPILED_HINTS, A_objc};
+	CHECK_ARGS("name service pipe_w cb compiled_hints");
 
-	CHECK_ARGS(5, "name service pipe_w cb compiled_hints");
 
-	Tcl_DStringInit(&cb);
-
-	name = Tcl_GetString(objv[1]);
-	service = Tcl_GetString(objv[2]);
-	TEST_OK_LABEL(done, retcode, Tcl_GetIntFromObj(interp, objv[3], &pipe_w));
-	cb_str = Tcl_GetStringFromObj(objv[4], &cb_len);
-	hints = (const struct addrinfo*)Tcl_GetByteArrayFromObj(objv[5], &hints_len);
+	name = Tcl_GetString(objv[A_NAME]);
+	service = Tcl_GetString(objv[A_SERVICE]);
+	TEST_OK(Tcl_GetIntFromObj(interp, objv[A_PIPE_W], &pipe_w));
+	cb_str = Tcl_GetStringFromObj(objv[A_CB], &cb_len);
+	hints = (const struct addrinfo*)Tcl_GetByteArrayFromObj(objv[A_COMPILED_HINTS], &hints_len);
 
 	if (name[0] == 0)    name = NULL;
 	if (service[0] == 0) service = NULL;
 
 	if (!(name || service))
-		THROW_ERROR_LABEL(done, retcode, "At least one of name or service must not be blank");
+		THROW_ERROR("At least one of name or service must not be blank");
 	
 	if (hints_len != (Tcl_Size)sizeof(*hints))
-		THROW_ERROR_LABEL(done, retcode, "Compiled hints is the wrong size");
+		THROW_ERROR("Compiled hints is the wrong size");
 
 	Tcl_DStringAppend(&cb, cb_str, cb_len);
 
 	Tcl_DStringStartSublist(&cb);
+	struct addrinfo*		res = NULL;		defer { if (res) freeaddrinfo(res); }
 	rc = getaddrinfo(name, service, hints, &res);
 	append_outcome(&cb, name, service, rc, res, service != NULL);
 	Tcl_DStringEndSublist(&cb);
@@ -187,7 +185,7 @@ again:
 	got = write(pipe_w, bytes, remain);
 	if (got == -1) {
 		if (errno == EINTR) goto again;
-		THROW_POSIX_LABEL(done, retcode, "Error writing getaddrinfo to pipe_w");
+		THROW_POSIX("Error writing getaddrinfo to pipe_w");
 	} else if (got < remain) {
 		// I think pipe semantics guarantees we can't land here
 		remain -= got;
@@ -195,14 +193,7 @@ again:
 		goto again;
 	}
 
-done:
-	Tcl_DStringFree(&cb);
-
-	if (res) {
-		freeaddrinfo(res);
-		res = NULL;
-	}
-	return retcode;
+	return TCL_OK;
 }
 
 //>>>
@@ -225,14 +216,14 @@ static int handle_response_cmd(ClientData cdata, Tcl_Interp* interp, int objc, T
 	}
 
 	if (msg.msg) {
-		int		retcode = TCL_OK;
+		int		code = TCL_OK;
 
 		//Tcl_Obj*	cb = NULL;
 		//replace_tclobj(&cb, Tcl_NewStringObj(msg.msg, msg.len));
-		retcode = Tcl_EvalEx(interp, msg.msg, msg.len, TCL_EVAL_GLOBAL);
+		code = Tcl_EvalEx(interp, msg.msg, msg.len, TCL_EVAL_GLOBAL);
 		free(msg.msg);
 		msg.msg = NULL;
-		return retcode;
+		return code;
 	} else {
 		/* msg.msg could be NULL if the strdup failed to allocate memory for the copy.  Things are far gone
 		 * if that is the case, but at least don't make things worse here by segfaulting.
@@ -346,26 +337,27 @@ static void notify_thread(sigval_t arg) //<<<
 static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
 	struct interp_cx*	l = Tcl_GetAssocData(interp, "resolve", NULL);
-	int					retcode = TCL_OK;
 	struct sigevent		sigev;
 	int					rc;
-	struct gai_cx*		cx = NULL;
 	Tcl_Size			i;
 	Tcl_Obj**			reqv;
 	Tcl_Size			reqc;
 
 	(void)cdata;
 
-	CHECK_ARGS(2, "reqs cb");
+	enum {A_cmd, A_REQS, A_CB, A_objc};
+	CHECK_ARGS("reqs cb");
 
-	TEST_OK_LABEL(err, retcode, Tcl_ListObjGetElements(interp, objv[1], &reqc, &reqv));
+	TEST_OK(Tcl_ListObjGetElements(interp, objv[A_REQS], &reqc, &reqv));
 
-	cx = (struct gai_cx*)malloc(sizeof *cx);
-	memset(cx, 0, sizeof *cx);
-	cx->cb = strdup(Tcl_GetString(objv[2]));
+	struct gai_cx*		cx = malloc(sizeof *cx);
+	if (!cx) Tcl_Panic("resolve getaddrinfo_a_cmd: failed to malloc struct_gai_cx");
+	*cx = (struct gai_cx){};
+	defer { if (cx) free_gai_cx(cx); }
+	cx->cb = strdup(Tcl_GetString(objv[A_CB]));
 	if (cx->cb == NULL)
 		// Since the only way we should be able to get here is ENOMEM, this probably won't work:
-		THROW_ERROR_LABEL(err, retcode, "Error copying callback string: ", Tcl_ErrnoMsg(Tcl_GetErrno()));
+		THROW_ERROR("Error copying callback string: ", Tcl_ErrnoMsg(Tcl_GetErrno()));
 
 	cx->pipe_w = l->pipe[PIPE_W];
 	cx->req_n = reqc;
@@ -387,9 +379,9 @@ static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 		Tcl_Size				compiled_req_len;
 		struct addrinfo*		req = NULL;
 
-		TEST_OK_LABEL(err, retcode, Tcl_ListObjGetElements(interp, reqv[i], &rfc, &rfv));
+		TEST_OK(Tcl_ListObjGetElements(interp, reqv[i], &rfc, &rfv));
 		if (rfc != 3)
-			THROW_ERROR_LABEL(err, retcode, "Each req must be a list of length 3");
+			THROW_ERROR("Each req must be a list of length 3");
 
 		str = Tcl_GetStringFromObj(rfv[0], &str_len);
 		if (str_len) {
@@ -397,8 +389,7 @@ static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 			if (cx->req[i].ar_name == NULL) {
 				// Since the only way we should be able to get here is ENOMEM, this probably won't work:
 				Tcl_SetObjResult(interp, Tcl_ObjPrintf("Error copying name string: %s", Tcl_ErrnoMsg(Tcl_GetErrno())));
-				retcode = TCL_ERROR;
-				goto err;
+				return TCL_ERROR;
 			}
 		}
 
@@ -407,12 +398,12 @@ static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 			cx->req[i].ar_service = strdup(str);
 			if (cx->req[i].ar_service == NULL)
 				// Since the only way we should be able to get here is ENOMEM, this probably won't work:
-				THROW_ERROR_LABEL(err, retcode, "Error copying service string: ", Tcl_ErrnoMsg(Tcl_GetErrno()));
+				THROW_ERROR("Error copying service string: ", Tcl_ErrnoMsg(Tcl_GetErrno()));
 		}
 
 		compiled_req = Tcl_GetByteArrayFromObj(rfv[2], &compiled_req_len);
 		if (compiled_req_len != (Tcl_Size)sizeof(struct addrinfo))
-			THROW_ERROR_LABEL(err, retcode, "Compiled request is the wrong size");
+			THROW_ERROR("Compiled request is the wrong size");
 
 		req = malloc(compiled_req_len);
 		memcpy(req, compiled_req, compiled_req_len);
@@ -438,26 +429,18 @@ static int getaddrinfo_a_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 		}
 		Tcl_SetErrorCode(interp, "RESOLVE", "GAI", gai_err, NULL);
 
-		retcode = TCL_ERROR;
-		goto err;
+		return TCL_ERROR;
 	}
 
-	return retcode;
+	cx = NULL;	// Hand off to sigev
 
-err:
-	if (cx) {
-		free_gai_cx(cx);
-		cx = NULL;
-	}
-
-	return retcode;
+	return TCL_OK;
 }
 
 //>>>
 #endif
 static int _getnameinfo_flags(Tcl_Interp* interp, Tcl_Obj* obj, int* flags) //<<<
 {
-	int					retcode = TCL_OK;
 	int					res = 0;
 	Tcl_Obj**			ov = NULL;
 	Tcl_Size			oc;
@@ -501,26 +484,24 @@ static int _getnameinfo_flags(Tcl_Interp* interp, Tcl_Obj* obj, int* flags) //<<
 		0
 	};
 
-	TEST_OK_LABEL(done, retcode, Tcl_ListObjGetElements(interp, obj, &oc, &ov));
+	TEST_OK(Tcl_ListObjGetElements(interp, obj, &oc, &ov));
 
 	for (i=0; i<oc; i++) {
 		int	index;
 
-		TEST_OK_LABEL(done, retcode, Tcl_GetIndexFromObj(interp, ov[i], flag_str, "flag", TCL_EXACT, &index));
+		TEST_OK(Tcl_GetIndexFromObj(interp, ov[i], flag_str, "flag", TCL_EXACT, &index));
 		res |= flag_map[index];
 	}
 
 	*flags = res;
 
-done:
-	return retcode;
+	return TCL_OK;
 }
 
 //>>>
 static int getnameinfo_ipv4_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
 	struct interp_cx*	l = Tcl_GetAssocData(interp, "resolve", NULL);
-	int					retcode = TCL_OK;
 	char				host[NI_MAXHOST];
 	char				serv[NI_MAXSERV];
 	char*				hostptr = host;
@@ -535,35 +516,36 @@ static int getnameinfo_ipv4_cmd(ClientData cdata, Tcl_Interp* interp, int objc, 
 	struct sockaddr_in	addr = {0};
 	socklen_t			addrlen = sizeof(addr);
 	int					rc, flags;
-	Tcl_Obj*			res[2] = {NULL, NULL};
+	Tcl_Obj*			res[2] = {};	defer { for (int i=0; i<2; i++) replace_tclobj(&res[i], NULL); } 
 
-	CHECK_ARGS(3, "addr port flags");
+	enum {A_cmd, A_ADDR, A_PORT, A_FLAGS, A_objc};
+	CHECK_ARGS("addr port flags");
 
-	addr_str = Tcl_GetStringFromObj(objv[1], &addr_str_len);
+	addr_str = Tcl_GetStringFromObj(objv[A_ADDR], &addr_str_len);
 
 	addr.sin_family = AF_INET;
 	if (addr_str_len > 0) {
 		if (inet_pton(AF_INET, addr_str, &addr.sin_addr.s_addr) != 1)
-			THROW_ERROR_LABEL(done, retcode, "Invalid IPv4 address: \"", addr_str, "\"");
+			THROW_ERROR("Invalid IPv4 address: \"", addr_str, "\"");
 	} else {
 		hostptr = NULL;
 		hostptr_len = 0;
 	}
 
-	serv_str = Tcl_GetStringFromObj(objv[2], &serv_str_len);
+	serv_str = Tcl_GetStringFromObj(objv[A_PORT], &serv_str_len);
 
 	if (serv_str_len > 0) {
 		int port;
-		TEST_OK_LABEL(done, retcode, Tcl_GetIntFromObj(interp, objv[2], &port));
+		TEST_OK(Tcl_GetIntFromObj(interp, objv[A_PORT], &port));
 		if (port < 0 || port >= (1<<16))
-			THROW_ERROR_LABEL(done, retcode, "Port is outside the valid range [0..2**16): ", serv_str);
+			THROW_ERROR("Port is outside the valid range [0..2**16): ", serv_str);
 		addr.sin_port = htons(port);
 	} else {
 		servptr = NULL;
 		servptr_len = 0;
 	}
 
-	TEST_OK_LABEL(done, retcode, _getnameinfo_flags(interp, objv[3], &flags));
+	TEST_OK(_getnameinfo_flags(interp, objv[A_FLAGS], &flags));
 
 	if (hostptr_len || servptr_len) {
 		rc = getnameinfo((struct sockaddr*)&addr, addrlen, hostptr, hostptr_len, servptr, servptr_len, flags);
@@ -571,8 +553,7 @@ static int getnameinfo_ipv4_cmd(ClientData cdata, Tcl_Interp* interp, int objc, 
 			if (rc == EAI_SYSTEM) {
 				Tcl_SetErrno(errno);
 				Tcl_SetObjResult(interp, Tcl_NewStringObj(Tcl_PosixError(interp), -1));
-				retcode = TCL_ERROR;
-				goto done;
+				return TCL_ERROR;
 			} else {
 				const char*		gai_err = NULL;
 
@@ -588,8 +569,7 @@ static int getnameinfo_ipv4_cmd(ClientData cdata, Tcl_Interp* interp, int objc, 
 					default:			gai_err = "unknown";		break;
 				}
 				Tcl_SetErrorCode(interp, "RESOLVE", "GAI", gai_err, NULL);
-				retcode = TCL_ERROR;
-				goto done;
+				return TCL_ERROR;
 			}
 		}
 	}
@@ -599,18 +579,13 @@ static int getnameinfo_ipv4_cmd(ClientData cdata, Tcl_Interp* interp, int objc, 
 
 	Tcl_SetObjResult(interp, Tcl_NewListObj(2, res));
 
-done:
-	replace_tclobj(&res[0], NULL);
-	replace_tclobj(&res[1], NULL);
-
-	return retcode;
+	return TCL_OK;
 }
 
 //>>>
 static int getnameinfo_ipv6_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj* const objv[]) //<<<
 {
 	struct interp_cx*	l = Tcl_GetAssocData(interp, "resolve", NULL);
-	int					retcode = TCL_OK;
 	char				host[NI_MAXHOST];
 	char				serv[NI_MAXSERV];
 	char*				hostptr = host;
@@ -625,35 +600,36 @@ static int getnameinfo_ipv6_cmd(ClientData cdata, Tcl_Interp* interp, int objc, 
 	struct sockaddr_in6	addr = {0};
 	socklen_t			addrlen = sizeof(addr);
 	int					rc, flags;
-	Tcl_Obj*			res[2] = {NULL, NULL};
+	Tcl_Obj*			res[2] = {};	defer { for (int i=0; i<2; i++) replace_tclobj(&res[i], NULL); } 
 
-	CHECK_ARGS(3, "addr port flags");
+	enum {A_cmd, A_ADDR, A_PORT, A_FLAGS, A_objc};
+	CHECK_ARGS("addr port flags");
 
-	addr_str = Tcl_GetStringFromObj(objv[1], &addr_str_len);
+	addr_str = Tcl_GetStringFromObj(objv[A_ADDR], &addr_str_len);
 
 	addr.sin6_family = AF_INET6;
 	if (addr_str_len > 0) {
 		if (inet_pton(AF_INET6, addr_str, &addr.sin6_addr.s6_addr) != 1)
-			THROW_ERROR_LABEL(done, retcode, "Invalid IPv6 address: \"", addr_str, "\"");
+			THROW_ERROR("Invalid IPv6 address: \"", addr_str, "\"");
 	} else {
 		hostptr = NULL;
 		hostptr_len = 0;
 	}
 
-	serv_str = Tcl_GetStringFromObj(objv[2], &serv_str_len);
+	serv_str = Tcl_GetStringFromObj(objv[A_PORT], &serv_str_len);
 
 	if (serv_str_len > 0) {
 		int port;
-		TEST_OK_LABEL(done, retcode, Tcl_GetIntFromObj(interp, objv[2], &port));
+		TEST_OK(Tcl_GetIntFromObj(interp, objv[A_PORT], &port));
 		if (port < 0 || port >= (1<<16))
-			THROW_ERROR_LABEL(done, retcode, "Port is outside the valid range [0..2**16): ", serv_str);
+			THROW_ERROR("Port is outside the valid range [0..2**16): ", serv_str);
 		addr.sin6_port = htons(port);
 	} else {
 		servptr = NULL;
 		servptr_len = 0;
 	}
 
-	TEST_OK_LABEL(done, retcode, _getnameinfo_flags(interp, objv[3], &flags));
+	TEST_OK(_getnameinfo_flags(interp, objv[A_FLAGS], &flags));
 
 	if (hostptr_len || servptr_len) {
 		rc = getnameinfo((struct sockaddr*)&addr, addrlen, hostptr, hostptr_len, servptr, servptr_len, flags);
@@ -661,8 +637,7 @@ static int getnameinfo_ipv6_cmd(ClientData cdata, Tcl_Interp* interp, int objc, 
 			if (rc == EAI_SYSTEM) {
 				Tcl_SetErrno(errno);
 				Tcl_SetObjResult(interp, Tcl_NewStringObj(Tcl_PosixError(interp), -1));
-				retcode = TCL_ERROR;
-				goto done;
+				return TCL_ERROR;
 			} else {
 				const char*		gai_err = NULL;
 
@@ -678,8 +653,7 @@ static int getnameinfo_ipv6_cmd(ClientData cdata, Tcl_Interp* interp, int objc, 
 					default:			gai_err = "unknown";		break;
 				}
 				Tcl_SetErrorCode(interp, "RESOLVE", "GAI", gai_err, NULL);
-				retcode = TCL_ERROR;
-				goto done;
+				return TCL_ERROR;
 			}
 		}
 	}
@@ -689,11 +663,7 @@ static int getnameinfo_ipv6_cmd(ClientData cdata, Tcl_Interp* interp, int objc, 
 
 	Tcl_SetObjResult(interp, Tcl_NewListObj(2, res));
 
-done:
-	replace_tclobj(&res[0], NULL);
-	replace_tclobj(&res[1], NULL);
-
-	return retcode;
+	return TCL_OK;
 }
 
 //>>>
@@ -706,7 +676,8 @@ static int have_idn_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl_Obj*
 #else
 	const int			have_idn = 0;
 #endif
-	CHECK_ARGS(0, "");
+	enum {A_cmd, A_objc};
+	CHECK_ARGS("");
 	Tcl_SetObjResult(interp, have_idn ? l->t : l->f);
 	return TCL_OK;
 }
@@ -776,12 +747,13 @@ static int compile_hints_cmd(ClientData cdata, Tcl_Interp* interp, int objc, Tcl
 	Tcl_Size		flagc;
 	Tcl_Size		i;
 
-	CHECK_ARGS(4, "family protocol socktype flags");
+	enum {A_cmd, A_FAMILY, A_PROTOCOL, A_SOCKTYPE, A_FLAGS, A_objc};
+	CHECK_ARGS("family protocol socktype flags");
 
-	TEST_OK(Tcl_GetIndexFromObj(interp, objv[1], family_str,   "family",   TCL_EXACT, &family_idx));
-	TEST_OK(Tcl_GetIndexFromObj(interp, objv[2], protocol_str, "protocol", TCL_EXACT, &protocol_idx));
-	TEST_OK(Tcl_GetIndexFromObj(interp, objv[3], socktype_str, "socktype", TCL_EXACT, &socktype_idx));
-	TEST_OK(Tcl_ListObjGetElements(interp, objv[4], &flagc, &flagv));
+	TEST_OK(Tcl_GetIndexFromObj(interp, objv[A_FAMILY],   family_str,   "family",   TCL_EXACT, &family_idx));
+	TEST_OK(Tcl_GetIndexFromObj(interp, objv[A_PROTOCOL], protocol_str, "protocol", TCL_EXACT, &protocol_idx));
+	TEST_OK(Tcl_GetIndexFromObj(interp, objv[A_SOCKTYPE], socktype_str, "socktype", TCL_EXACT, &socktype_idx));
+	TEST_OK(Tcl_ListObjGetElements(interp, objv[A_FLAGS], &flagc, &flagv));
 
 	memset(&hints, 0, sizeof(hints));
 
