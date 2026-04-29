@@ -1,5 +1,5 @@
 project('resolve', 'c',
-  version:          '0.12',
+  version:          '0.13',
   default_options:  ['c_std=gnu2y,gnu23,gnu2x', 'warning_level=3', 'werror=true'],
   meson_version:    '>=1.3.0',
 )
@@ -36,11 +36,8 @@ is_glibc = cc.compiles('''
 #endif
 ''', name: 'glibc check')
 
-if is_glibc
-  add_project_arguments('-D_GNU_SOURCE', language: 'c')
-else
-  add_project_arguments('-D_POSIX_C_SOURCE=200809L', language: 'c')
-endif
+# _GNU_SOURCE or _BSD_SOURCE is required (even on musl) to get NI_MAXHOST/NI_MAXSERV from netdb.h
+add_project_arguments('-D_GNU_SOURCE', language: 'c')
 
 # Feature detection
 anl_dep = cc.find_library('anl', required: false)
